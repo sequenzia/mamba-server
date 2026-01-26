@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green.svg)](https://fastapi.tiangolo.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A production-ready FastAPI backend service that provides OpenAI-powered chat completions with streaming support, designed for seamless integration with the Vercel AI SDK.
+A production-ready FastAPI with Pydantic AI backend service that provides OpenAI-powered chat completions with streaming support, designed for seamless integration with the Vercel AI SDK.
 
 ## Overview
 
