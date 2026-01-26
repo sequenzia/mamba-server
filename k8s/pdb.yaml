@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mamba-server-pdb
+  labels:
+    app: mamba-server
+    app.kubernetes.io/name: mamba-server
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: mamba-server

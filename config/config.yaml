@@ -1,0 +1,60 @@
+# mamba-server configuration
+# Copy to config.local.yaml and modify for local development
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  timeout_seconds: 300
+  cors:
+    allowed_origins:
+      - "http://localhost:5173"
+      - "https://chat.example.com"
+    allowed_methods:
+      - "GET"
+      - "POST"
+      - "OPTIONS"
+    allowed_headers:
+      - "Content-Type"
+      - "Authorization"
+      - "X-API-Key"
+      - "X-Request-ID"
+
+auth:
+  mode: "none"  # none | api_key | jwt
+  api_keys: []
+  jwt:
+    algorithm: "HS256"
+
+openai:
+  base_url: "https://api.openai.com/v1"
+  timeout_seconds: 60
+  max_retries: 3
+  default_model: "gpt-4o"
+
+models:
+  - id: "openai/gpt-4o"
+    name: "GPT-4o"
+    provider: "openai"
+    openai_model: "gpt-4o"
+    description: "Most capable GPT-4 model"
+    context_window: 128000
+    supports_tools: true
+  - id: "openai/gpt-4o-mini"
+    name: "GPT-4o Mini"
+    provider: "openai"
+    openai_model: "gpt-4o-mini"
+    description: "Fast and cost-effective"
+    context_window: 128000
+    supports_tools: true
+
+logging:
+  level: "INFO"
+  format: "json"
+  include_request_body: false
+  include_response_body: false
+
+health:
+  openai_check_enabled: true
+  check_interval_seconds: 30
+  timeout_seconds: 5

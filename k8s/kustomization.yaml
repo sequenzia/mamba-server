@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: mamba-server
+
+namespace: default
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: mamba-server
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - configmap.yaml
+  - pdb.yaml
+
+# Common labels added to all resources
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: kustomize
+
+# Image customization - uncomment and set your registry
+# images:
+#   - name: mamba-server
+#     newName: your-registry/mamba-server
+#     newTag: v1.0.0
