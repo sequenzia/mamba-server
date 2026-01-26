@@ -1,0 +1,11 @@
+{
+  "env": {
+    "CLAUDE_CODE_TASK_LIST_ID": "mamba-server"
+  },
+  "enabledMcpjsonServers": [
+    "context7"
+  ],
+  "enabledPlugins": {
+    "pyright-lsp@claude-plugins-official": true
+  }
+}
