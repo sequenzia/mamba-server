@@ -104,6 +104,27 @@ class HealthSettings(BaseModel):
     timeout_seconds: int = 5
 
 
+class TitleSettings(BaseModel):
+    """Settings for title generation."""
+
+    max_length: int = Field(
+        default=50,
+        ge=10,
+        le=200,
+        description="Maximum title length in characters",
+    )
+    timeout_ms: int = Field(
+        default=10000,
+        ge=1000,
+        le=30000,
+        description="Timeout for title generation in milliseconds",
+    )
+    model: str = Field(
+        default="gpt-4o-mini",
+        description="Model to use for title generation",
+    )
+
+
 def _load_yaml_config(config_dir: Path) -> dict:
     """Load configuration from YAML files.
 
@@ -152,6 +173,7 @@ class Settings(BaseSettings):
     openai: OpenAISettings = Field(default_factory=OpenAISettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     health: HealthSettings = Field(default_factory=HealthSettings)
+    title: TitleSettings = Field(default_factory=TitleSettings)
     models: list[ModelConfig] = Field(default_factory=list)
 
     # Direct environment variable mappings for common settings

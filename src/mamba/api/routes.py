@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from mamba.api.handlers.chat import router as chat_router
 from mamba.api.handlers.health import router as health_router
 from mamba.api.handlers.models import router as models_router
+from mamba.api.handlers.title import router as title_router
 
 # Main API router that aggregates all endpoint routers
 api_router = APIRouter()
@@ -17,3 +18,6 @@ api_router.include_router(models_router, tags=["models"])
 
 # Include chat routes
 api_router.include_router(chat_router, tags=["chat"])
+
+# Include title routes
+api_router.include_router(title_router, tags=["title"])

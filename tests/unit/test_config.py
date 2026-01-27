@@ -18,6 +18,7 @@ from mamba.config import (
     OpenAISettings,
     ServerSettings,
     Settings,
+    TitleSettings,
     _deep_merge,
     _load_yaml_config,
 )
@@ -166,6 +167,64 @@ class TestHealthSettings:
         assert settings.openai_check_enabled is True
         assert settings.check_interval_seconds == 30
         assert settings.timeout_seconds == 5
+
+
+class TestTitleSettings:
+    """Tests for TitleSettings."""
+
+    def test_default_values(self):
+        """Test default values."""
+        settings = TitleSettings()
+        assert settings.max_length == 50
+        assert settings.timeout_ms == 10000
+        assert settings.model == "gpt-4o-mini"
+
+    def test_custom_values(self):
+        """Test custom values are accepted."""
+        settings = TitleSettings(
+            max_length=100,
+            timeout_ms=5000,
+            model="gpt-4o",
+        )
+        assert settings.max_length == 100
+        assert settings.timeout_ms == 5000
+        assert settings.model == "gpt-4o"
+
+    def test_max_length_minimum_constraint(self):
+        """Test max_length minimum constraint (ge=10)."""
+        with pytest.raises(ValueError):
+            TitleSettings(max_length=9)
+
+    def test_max_length_maximum_constraint(self):
+        """Test max_length maximum constraint (le=200)."""
+        with pytest.raises(ValueError):
+            TitleSettings(max_length=201)
+
+    def test_max_length_at_boundaries(self):
+        """Test max_length at boundary values."""
+        settings_min = TitleSettings(max_length=10)
+        assert settings_min.max_length == 10
+
+        settings_max = TitleSettings(max_length=200)
+        assert settings_max.max_length == 200
+
+    def test_timeout_ms_minimum_constraint(self):
+        """Test timeout_ms minimum constraint (ge=1000)."""
+        with pytest.raises(ValueError):
+            TitleSettings(timeout_ms=999)
+
+    def test_timeout_ms_maximum_constraint(self):
+        """Test timeout_ms maximum constraint (le=30000)."""
+        with pytest.raises(ValueError):
+            TitleSettings(timeout_ms=30001)
+
+    def test_timeout_ms_at_boundaries(self):
+        """Test timeout_ms at boundary values."""
+        settings_min = TitleSettings(timeout_ms=1000)
+        assert settings_min.timeout_ms == 1000
+
+        settings_max = TitleSettings(timeout_ms=30000)
+        assert settings_max.timeout_ms == 30000
 
 
 class TestModelConfig:

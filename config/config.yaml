@@ -58,3 +58,9 @@ health:
   openai_check_enabled: true
   check_interval_seconds: 30
   timeout_seconds: 5
+
+# Title generation settings
+title:
+  max_length: 50           # Maximum title length in characters (10-200)
+  timeout_ms: 10000        # Timeout for generation in milliseconds (1000-30000)
+  model: "gpt-4o-mini"     # Model to use for title generation

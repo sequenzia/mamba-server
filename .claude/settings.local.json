@@ -1,11 +1,12 @@
 {
+  "permissions": {
+    "additionalDirectories": [
+      "/Users/sequenzia/dev/repos/ai/ai-chatbot",
+      "/Users/sequenzia/dev/repos/mamba-chat"
+    ]
+  },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "context7"
-  ],
-  "permissions": {
-    "additionalDirectories": [
-      "/Users/sequenzia/dev/repos/ai/ai-chatbot"
-    ]
-  }
+  ]
 }
