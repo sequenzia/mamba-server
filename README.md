@@ -18,7 +18,7 @@ Mamba Server wraps OpenAI models using Pydantic AI's Agent-based architecture, d
 - **Flexible Authentication** - Support for none, API key, or JWT authentication
 - **Kubernetes Ready** - Health checks, liveness/readiness probes, and Helm-ready manifests
 - **Resilient** - Exponential backoff retry for OpenAI API calls
-- **Multi-source Configuration** - Environment variables and YAML file support
+- **Multi-source Configuration** - Environment variables, env file, and YAML file support
 
 ## Quick Start
 
@@ -59,8 +59,10 @@ uv run uvicorn mamba.main:app --reload
 Mamba Server supports multiple configuration sources with the following precedence (highest to lowest):
 
 1. Environment variables with `MAMBA_` prefix
-2. `config.local.yaml` (optional, git-ignored)
-3. `config.yaml`
+2. `~/mamba.env` file (user home directory)
+3. `config.local.yaml` (optional, git-ignored)
+4. `config/config.yaml`
+5. Code defaults
 
 ### Environment Variables
 
@@ -70,15 +72,24 @@ Mamba Server supports multiple configuration sources with the following preceden
 | `OPENAI_API_BASE_URL` | Custom OpenAI API base URL | `https://api.openai.com/v1` |
 | `MAMBA_SERVER__HOST` | Server bind address | `0.0.0.0` |
 | `MAMBA_SERVER__PORT` | Server port | `8000` |
-| `MAMBA_OPENAI__MODEL` | Default OpenAI model | `gpt-4o-mini` |
+| `MAMBA_OPENAI__DEFAULT_MODEL` | Default OpenAI model | `gpt-4o` |
 | `MAMBA_AUTH__MODE` | Auth mode: `none`, `api_key`, `jwt` | `none` |
-| `MAMBA_AUTH__API_KEY` | API key for authentication | - |
+| `MAMBA_LOGGING__LEVEL` | Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR` | `INFO` |
 
-Use `__` as the nested delimiter (e.g., `MAMBA_OPENAI__API_KEY`).
+Use `__` as the nested delimiter (e.g., `MAMBA_OPENAI__TIMEOUT_SECONDS`).
+
+### Env File Configuration
+
+Create a `~/mamba.env` file in your home directory for persistent settings:
+
+```bash
+OPENAI_API_KEY=your-api-key
+MAMBA_AUTH__MODE=api_key
+```
 
 ### YAML Configuration
 
-Create a `config.local.yaml` for local overrides:
+Create a `config.local.yaml` in the project root for local overrides:
 
 ```yaml
 server:
@@ -86,11 +97,13 @@ server:
   port: 8000
 
 openai:
-  model: "gpt-4o"
+  default_model: "gpt-4o"
 
 auth:
   mode: "api_key"
-  api_key: "your-secret-key"
+  api_keys:
+    - key: "your-secret-key"
+      name: "dev-key"
 ```
 
 ## API Documentation
@@ -126,7 +139,7 @@ curl -X POST http://localhost:8000/chat/completions \
     {"role": "system", "content": "You are a helpful assistant."},
     {"role": "user", "content": "Hello!"}
   ],
-  "model": "gpt-4o-mini"
+  "model": "gpt-4o"
 }
 ```
 
@@ -174,7 +187,7 @@ uv run pytest
 uv run pytest --cov=mamba
 
 # Run specific test file
-uv run pytest tests/test_agent.py -v
+uv run pytest tests/unit/core/test_agent.py -v
 ```
 
 ## Deployment

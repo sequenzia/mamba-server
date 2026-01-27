@@ -6,11 +6,16 @@ FastAPI backend service providing OpenAI-powered chat completions with streaming
 
 **Architecture Style:** Layered/N-Tier with Streaming-First Design
 
+**Architectural Layers:**
+1. API Layer (`api/`) - HTTP concerns, request validation, route registration
+2. Core/Business Layer (`core/`) - Domain logic, agent, streaming, tools
+3. Infrastructure Layer (`middleware/`, `config.py`) - Cross-cutting concerns
+
 **Key Characteristics:**
 - SSE streaming for real-time chat responses
 - Discriminated unions for type-safe event handling
 - Factory pattern throughout (`create_app()`, `create_agent()`, `create_streaming_response()`)
-- Middleware chain order matters: CORS → RequestID → Logging → Auth
+- Middleware chain order matters: CORS -> RequestID -> Logging -> Auth
 - Dependency injection via FastAPI `Depends()` with `Annotated` types
 - Stateless design - no database, no session state
 
@@ -19,6 +24,32 @@ FastAPI backend service providing OpenAI-powered chat completions with streaming
 - `POST /chat/completions` - Primary streaming chat endpoint
 - `POST /title/generate` - Title generation endpoint
 - CLI: `uvicorn mamba.main:app` or `python -m mamba`
+
+## Code Statistics
+
+| Metric | Value |
+|--------|-------|
+| Total Lines | ~3,275 lines of Python |
+| Python Modules | 31 files |
+| Layers | 6 (api, core, models, middleware, utils, config) |
+| Handlers | 4 (chat, health, models, title) |
+| Middleware | 3 (request_id, logging, auth) |
+| Core Modules | 6 (agent, streaming, messages, tools, tool_schema, title_utils) |
+| Models | 5 (events, request, response, health, title) |
+| Utilities | 2 (retry, errors) |
+| Unit Test Files | 23 |
+
+## Key Components
+
+| Component | File | Criticality | Description |
+|-----------|------|-------------|-------------|
+| ChatAgent | `core/agent.py` | Critical | Core AI interaction wrapper using pydantic-ai |
+| create_streaming_response() | `core/streaming.py` | Critical | Factory for all SSE responses with timeout handling |
+| Settings | `config.py` | Critical | Multi-source configuration management |
+| StreamEvent | `models/events.py` | High | Type-safe discriminated union for stream events |
+| chat_completions() | `api/handlers/chat.py` | High | Primary streaming endpoint handler |
+| convert_messages() | `core/agent.py` | High | Message format adapter (UI to pydantic-ai) |
+| @with_retry() | `utils/retry.py` | Medium | Exponential backoff resilience decorator |
 
 ## Repository Structure
 
@@ -135,9 +166,9 @@ mamba-server/
 
 **Priority order (highest to lowest):**
 1. Environment variables (`MAMBA_*` prefix)
-2. `.env` file
-3. `config.local.yaml`
-4. `config/config.yaml`
+2. `~/mamba.env` file (user home directory)
+3. `config.local.yaml` (project root)
+4. `config/config.yaml` (default configuration)
 5. Code defaults in `config.py`
 
 **Key settings:**
@@ -205,8 +236,8 @@ The agent supports these UI-generating tools (return args as result for client r
 1. Client sends `tools: ["generateForm", ...]` in request
 2. Handler enables tools via `enable_tools=True`
 3. Agent registers tools with Pydantic AI
-4. LLM decides to call tool → `ToolCallEvent` emitted
-5. Tool executes → Returns args dict (args = display data)
+4. LLM decides to call tool -> `ToolCallEvent` emitted
+5. Tool executes -> Returns args dict (args = display data)
 6. `ToolResultEvent` emitted
 7. Client renders tool result in UI
 
@@ -215,12 +246,12 @@ The agent supports these UI-generating tools (return args as result for client r
 ```
 main.py (entry point)
 ├── api/routes.py
-│   ├── api/handlers/chat.py → core/agent.py, core/streaming.py
-│   ├── api/handlers/health.py → config.py
-│   ├── api/handlers/models.py → config.py
-│   └── api/handlers/title.py → core/agent.py
+│   ├── api/handlers/chat.py -> core/agent.py, core/streaming.py
+│   ├── api/handlers/health.py -> config.py
+│   ├── api/handlers/models.py -> config.py
+│   └── api/handlers/title.py -> core/agent.py
 ├── middleware/
-│   ├── auth.py → config.py
+│   ├── auth.py -> config.py
 │   ├── logging.py
 │   └── request_id.py
 └── config.py (settings singleton, LRU cached)
@@ -233,37 +264,42 @@ core/agent.py
 └── models/request.py
 ```
 
+**Dependency Health:**
+- Circular dependencies: None detected
+- Layering violations: None detected
+- Coupling concerns: ChatAgent moderately coupled to pydantic-ai library
+
 ## Data Flow
 
 ```
 Client Request
      │
-     ▼
+     v
 ┌────────────────────┐
-│ Middleware Chain   │  CORS → RequestID → Logging → Auth
+│ Middleware Chain   │  CORS -> RequestID -> Logging -> Auth
 └────────────────────┘
      │
-     ▼
+     v
 ┌────────────────────┐
 │ Chat Handler       │  Validates request, extracts model
 └────────────────────┘
      │
-     ▼
+     v
 ┌────────────────────┐
 │ ChatAgent          │  Converts messages, registers tools
 └────────────────────┘
      │
-     ▼
+     v
 ┌────────────────────┐
 │ pydantic-ai        │  Streams to OpenAI API
 └────────────────────┘
      │
-     ▼
+     v
 ┌────────────────────┐
 │ Streaming          │  Encodes SSE, handles timeout
 └────────────────────┘
      │
-     ▼
+     v
 SSE Response (text-delta, tool-call, tool-result, finish)
 ```
 
@@ -276,7 +312,7 @@ SSE Response (text-delta, tool-call, tool-result, finish)
 - **All streaming responses must use `create_streaming_response()` factory** - ensures timeout handling
 - **Health endpoints bypass authentication** - see `auth.py` line 49
 - **JWT library is lazy-loaded** - only imported when jwt auth mode is used
-- **Tool schema generation**: Pydantic model → JSON Schema → OpenAI function format
+- **Tool schema generation**: Pydantic model -> JSON Schema -> OpenAI function format
 
 ## External Integrations
 
@@ -291,6 +327,14 @@ SSE Response (text-delta, tool-call, tool-result, finish)
 - Max retries: 3 (exponential backoff)
 - Default model: `gpt-4o`
 
+## Strengths
+
+1. **Clean Architecture with Clear Boundaries** - Well-separated layers with minimal cross-cutting
+2. **Type Safety Throughout** - Discriminated unions, full type hints on all public APIs
+3. **Production-Ready Operations** - K8s manifests, health probes, structured logging
+4. **Flexible Authentication** - Three modes with lazy JWT loading for performance
+5. **Well-Tested Core Logic** - 23 unit test files mirroring source structure
+
 ## Known Gaps
 
 - No CI/CD pipeline configured
@@ -298,4 +342,12 @@ SSE Response (text-delta, tool-call, tool-result, finish)
 - No metrics/observability (OpenTelemetry, Prometheus)
 - No rate limiting middleware
 - Single AI provider (OpenAI only) - no fallback
-- LRU cache for settings requires restart on config changes
+
+## Technical Debt
+
+| Item | Location | Risk |
+|------|----------|------|
+| pydantic-ai version pinning | `pyproject.toml` | Using `>=0.0.30` for 0.x library risks breaking changes |
+| Tool registration | `core/agent.py` | Inline in `_register_tools()` rather than from configuration |
+| Duplicate tool definitions | `tools.py`, `agent.py` | Tool definitions partially duplicated |
+| Settings cache | `config.py` | LRU cache requires server restart on config changes |
