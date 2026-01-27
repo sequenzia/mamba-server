@@ -143,6 +143,7 @@ mamba-server/
 **Key settings:**
 - `MAMBA_AUTH__MODE`: `none` | `api_key` | `jwt`
 - `MAMBA_OPENAI__API_KEY` or `OPENAI_API_KEY`: Required for OpenAI calls
+- `MAMBA_OPENAI__BASE_URL` or `OPENAI_API_BASE_URL`: Custom API base URL (default: `https://api.openai.com/v1`)
 - `MAMBA_OPENAI__DEFAULT_MODEL`: Default model (e.g., `gpt-4o`)
 - `MAMBA_LOGGING__LEVEL`: Logging verbosity
 

@@ -67,6 +67,7 @@ Mamba Server supports multiple configuration sources with the following preceden
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `OPENAI_API_KEY` | OpenAI API key (required) | - |
+| `OPENAI_API_BASE_URL` | Custom OpenAI API base URL | `https://api.openai.com/v1` |
 | `MAMBA_SERVER__HOST` | Server bind address | `0.0.0.0` |
 | `MAMBA_SERVER__PORT` | Server port | `8000` |
 | `MAMBA_OPENAI__MODEL` | Default OpenAI model | `gpt-4o-mini` |

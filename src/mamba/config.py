@@ -178,6 +178,7 @@ class Settings(BaseSettings):
 
     # Direct environment variable mappings for common settings
     openai_api_key: str | None = Field(default=None, validation_alias="OPENAI_API_KEY")
+    openai_base_url: str | None = Field(default=None, validation_alias="OPENAI_API_BASE_URL")
 
     def __init__(self, config_dir: Path | None = None, **data):
         """Initialize settings, loading from YAML if config_dir provided."""
@@ -192,6 +193,10 @@ class Settings(BaseSettings):
         # Apply OPENAI_API_KEY environment variable to openai.api_key if not set
         if self.openai_api_key and not self.openai.api_key:
             self.openai.api_key = self.openai_api_key
+
+        # Apply OPENAI_API_BASE_URL environment variable to openai.base_url if set
+        if self.openai_base_url:
+            self.openai.base_url = self.openai_base_url
 
     @field_validator("models", mode="before")
     @classmethod

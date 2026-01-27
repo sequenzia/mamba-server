@@ -347,6 +347,12 @@ class TestSettings:
         settings = Settings()
         assert settings.openai.api_key == "sk-test-key"
 
+    def test_openai_base_url_from_env(self, monkeypatch):
+        """Test OPENAI_API_BASE_URL environment variable is applied."""
+        monkeypatch.setenv("OPENAI_API_BASE_URL", "https://custom.api.com/v1")
+        settings = Settings()
+        assert settings.openai.base_url == "https://custom.api.com/v1"
+
     def test_load_from_yaml(self):
         """Test loading from YAML config directory."""
         with TemporaryDirectory() as tmpdir:
