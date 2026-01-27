@@ -99,6 +99,7 @@ auth:
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/chat/completions` | POST | Streaming chat completions via SSE |
+| `/title/generate` | POST | Generate conversation titles |
 | `/models` | GET | List available models |
 | `/health` | GET | Full health check (dependencies included) |
 | `/health/live` | GET | Liveness probe for Kubernetes |
@@ -212,18 +213,47 @@ Health probes are pre-configured:
 ```
 mamba-server/
 ├── src/mamba/
-│   ├── api/               # API layer (routes, handlers, dependencies)
-│   ├── core/              # Business logic (agent, streaming, messages, tools)
-│   ├── models/            # Pydantic models (request, response, events, health)
-│   ├── middleware/        # Cross-cutting concerns (auth, logging, request_id)
-│   ├── utils/             # Utilities (errors, retry)
-│   ├── config.py          # Configuration management
-│   └── main.py            # FastAPI application entry point
-├── tests/                 # Test suite (20+ test files)
-├── k8s/                   # Kubernetes manifests
-├── Dockerfile             # Multi-stage production build
-├── pyproject.toml         # Project configuration
-└── config.yaml            # Default configuration
+│   ├── api/                   # HTTP layer
+│   │   ├── handlers/          # Endpoint handlers (chat.py, health.py, models.py, title.py)
+│   │   ├── deps.py            # FastAPI dependency injection
+│   │   └── routes.py          # Route registration
+│   ├── core/                  # Business logic
+│   │   ├── agent.py           # ChatAgent - Pydantic AI wrapper
+│   │   ├── streaming.py       # SSE encoding, timeout handling
+│   │   ├── messages.py        # Message format conversion
+│   │   ├── tools.py           # Tool definitions (forms, charts, code, cards)
+│   │   ├── tool_schema.py     # OpenAI function format conversion
+│   │   └── title_utils.py     # Title processing utilities
+│   ├── middleware/            # Request processing chain
+│   │   ├── auth.py            # Auth modes: none, api_key, jwt
+│   │   ├── logging.py         # Structured request/response logging
+│   │   └── request_id.py      # X-Request-ID propagation
+│   ├── models/                # Pydantic schemas
+│   │   ├── events.py          # StreamEvent discriminated union
+│   │   ├── request.py         # ChatCompletionRequest, UIMessage
+│   │   ├── response.py        # ModelsResponse
+│   │   ├── health.py          # HealthResponse, ComponentHealth
+│   │   └── title.py           # TitleGenerationRequest/Response
+│   ├── utils/                 # Utilities
+│   │   ├── errors.py          # ErrorCode enum, error classification
+│   │   └── retry.py           # @with_retry decorator (exponential backoff)
+│   ├── config.py              # Settings management (multi-source)
+│   └── main.py                # FastAPI app factory, middleware setup
+├── tests/
+│   ├── unit/                  # Unit tests (23 test files)
+│   ├── integration/           # Integration tests
+│   └── e2e/                   # End-to-end tests
+├── k8s/                       # Kubernetes manifests
+│   ├── deployment.yaml        # Deployment with health probes
+│   ├── service.yaml           # Service definition
+│   ├── configmap.yaml         # Configuration
+│   ├── secrets.yaml.example   # Secret template
+│   ├── pdb.yaml               # Pod disruption budget
+│   └── kustomization.yaml     # Kustomize config
+├── config/
+│   └── config.yaml            # Default configuration
+├── Dockerfile                 # Multi-stage production build
+└── pyproject.toml             # Project configuration
 ```
 
 ## Tech Stack
@@ -237,6 +267,43 @@ mamba-server/
 | Testing | pytest, pytest-asyncio, respx |
 | Linting | Ruff |
 | Build | Hatchling, UV |
+
+## Architecture
+
+Mamba Server uses a **Layered/N-Tier architecture** with a **streaming-first design**:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Client Request                           │
+└────────────────────────────┬────────────────────────────────┘
+                             │
+┌────────────────────────────▼────────────────────────────────┐
+│                  Middleware Chain                           │
+│         CORS → RequestID → Logging → Auth                   │
+└────────────────────────────┬────────────────────────────────┘
+                             │
+┌────────────────────────────▼────────────────────────────────┐
+│                    API Layer                                │
+│              (handlers, routes, deps)                       │
+└────────────────────────────┬────────────────────────────────┘
+                             │
+┌────────────────────────────▼────────────────────────────────┐
+│                   Core Layer                                │
+│         (ChatAgent, streaming, messages, tools)             │
+└────────────────────────────┬────────────────────────────────┘
+                             │
+┌────────────────────────────▼────────────────────────────────┐
+│                  External APIs                              │
+│                  (OpenAI via pydantic-ai)                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Design Patterns:**
+- **Factory Pattern** - `create_app()`, `create_agent()`, `create_streaming_response()` for testability
+- **Discriminated Unions** - Type-safe `StreamEvent` and `MessagePart` with Pydantic discriminators
+- **Adapter Pattern** - Message format conversion between UI and OpenAI formats
+- **Decorator Pattern** - `@with_retry()` for exponential backoff on failures
+- **Dependency Injection** - FastAPI `Depends()` with `Annotated` types
 
 ## License
 
