@@ -16,8 +16,7 @@ dependencies = [
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
     "pydantic-ai>=0.0.49",
-    "httpx>=0.28.0",
-    "mamba-agents @ file:///Users/sequenzia/dev/repos/mamba-agents",
+    "httpx>=0.28.0"
 ]
 
 [project.optional-dependencies]
