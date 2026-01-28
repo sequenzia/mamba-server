@@ -37,7 +37,8 @@ from mamba.models.events import (
     ToolResultEvent,
 )
 from mamba.models.request import TextPart as UITextPart
-from mamba.models.request import ToolInvocationPart, UIMessage
+from mamba.models.request import ToolCallPart as UIToolCallPart
+from mamba.models.request import ToolInvocationPart, ToolResultPart, UIMessage
 
 logger = logging.getLogger(__name__)
 
@@ -137,9 +138,37 @@ class ChatAgent:
                 if text_content:
                     response_parts.append(TextPart(content=text_content))
 
-                # Extract tool calls (without results)
+                # Extract tool calls and results from all supported formats
                 for part in msg.parts:
-                    if isinstance(part, ToolInvocationPart):
+                    # AI SDK format: tool-call
+                    if isinstance(part, UIToolCallPart):
+                        response_parts.append(
+                            ToolCallPart(
+                                tool_name=part.toolName,
+                                args=part.args or {},
+                                tool_call_id=part.toolCallId,
+                            )
+                        )
+                    # AI SDK format: tool-result
+                    elif isinstance(part, ToolResultPart):
+                        result_content = (
+                            json.dumps(part.result)
+                            if isinstance(part.result, dict)
+                            else str(part.result)
+                        )
+                        result.append(
+                            ModelRequest(
+                                parts=[
+                                    ToolReturnPart(
+                                        tool_name="unknown",  # Not available in AI SDK format
+                                        content=result_content,
+                                        tool_call_id=part.toolCallId,
+                                    )
+                                ],
+                            )
+                        )
+                    # Legacy format: tool-invocation
+                    elif isinstance(part, ToolInvocationPart):
                         if part.result is None:
                             # This is a tool call
                             response_parts.append(

@@ -1,6 +1,6 @@
 """Chat request data models."""
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field
 
@@ -12,8 +12,25 @@ class TextPart(BaseModel):
     text: str
 
 
+class ToolCallPart(BaseModel):
+    """Tool call part of a message (AI SDK format)."""
+
+    type: Literal["tool-call"] = "tool-call"
+    toolCallId: str
+    toolName: str
+    args: dict | None = None
+
+
+class ToolResultPart(BaseModel):
+    """Tool result part of a message (AI SDK format)."""
+
+    type: Literal["tool-result"] = "tool-result"
+    toolCallId: str
+    result: Any
+
+
 class ToolInvocationPart(BaseModel):
-    """Tool invocation part of a message."""
+    """Tool invocation part of a message (legacy format)."""
 
     type: Literal["tool-invocation"] = "tool-invocation"
     toolCallId: str
@@ -22,9 +39,9 @@ class ToolInvocationPart(BaseModel):
     result: dict | None = None
 
 
-# Discriminated union for message parts
+# Discriminated union for message parts - supports both AI SDK and legacy formats
 MessagePart = Annotated[
-    Union[TextPart, ToolInvocationPart],
+    Union[TextPart, ToolCallPart, ToolResultPart, ToolInvocationPart],
     Field(discriminator="type"),
 ]
 
@@ -43,8 +60,8 @@ class ChatCompletionRequest(BaseModel):
     messages: list[UIMessage]
     model: str = Field(
         ...,
-        pattern=r"^openai/[\w-]+$",
-        description="Model identifier in format 'openai/model-name'",
+        min_length=1,
+        description="Model identifier (e.g., 'gpt-4o' or 'openai/gpt-4o')",
     )
     tools: list[str] | None = Field(
         default=None,

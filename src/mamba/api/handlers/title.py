@@ -89,3 +89,23 @@ async def generate_title(
             f"Title generation failed for conversation {request.conversationId}: {e}"
         )
         return TitleGenerationResponse(title="", useFallback=True)
+
+
+@router.post("/generate-title", response_model=TitleGenerationResponse)
+async def generate_title_alias(
+    request: TitleGenerationRequest,
+    settings: SettingsDep,
+) -> TitleGenerationResponse:
+    """Alias endpoint for title generation.
+
+    Provides compatibility with frontends expecting /generate-title path.
+    Delegates to the main generate_title handler.
+
+    Args:
+        request: The title generation request.
+        settings: Application settings dependency.
+
+    Returns:
+        TitleGenerationResponse from the main handler.
+    """
+    return await generate_title(request, settings)

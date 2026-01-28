@@ -68,8 +68,8 @@ class TestChatCompletionsValidation:
         assert response.status_code == 400
         assert "empty" in response.json()["detail"].lower()
 
-    def test_rejects_invalid_model_format(self, settings):
-        """Test that invalid model format returns validation error."""
+    def test_rejects_empty_model(self, settings):
+        """Test that empty model string returns validation error."""
         app = create_test_app(settings)
         client = TestClient(app)
 
@@ -83,7 +83,7 @@ class TestChatCompletionsValidation:
                         "parts": [{"type": "text", "text": "Hello"}],
                     }
                 ],
-                "model": "invalid-model",  # Missing openai/ prefix
+                "model": "",  # Empty model string
             },
         )
 
