@@ -6,7 +6,13 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, HTTPException, Request
 
 from mamba.api.deps import SettingsDep
+from mamba.config import Settings
 from mamba.core.agent import create_agent
+from mamba.core.mamba_agent import (
+    convert_ui_messages_to_dicts,
+    get_agent,
+    stream_mamba_agent_events,
+)
 from mamba.core.messages import extract_text_content
 from mamba.core.streaming import (
     create_streaming_response,
@@ -15,6 +21,12 @@ from mamba.core.streaming import (
 )
 from mamba.models.events import ErrorEvent, FinishEvent, TextDeltaEvent
 from mamba.models.request import ChatCompletionRequest
+from mamba.utils.errors import (
+    ErrorCode,
+    classify_exception,
+    create_stream_error_event,
+    log_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +48,56 @@ def _extract_model_name(model_id: str) -> str:
     return model_id
 
 
+async def _stream_agent_response(
+    request: ChatCompletionRequest,
+    settings: Settings,
+    model_name: str,
+) -> AsyncIterator[str]:
+    """Stream response from a Mamba Agent.
+
+    Args:
+        request: The chat completion request.
+        settings: Application settings.
+        model_name: Model name to use.
+
+    Yields:
+        SSE-encoded event strings.
+    """
+    try:
+        # Get the configured agent
+        agent = get_agent(request.agent, settings, model_name)
+
+        # Convert message history (all but last message)
+        history = None
+        if len(request.messages) > 1:
+            history = convert_ui_messages_to_dicts(request.messages[:-1])
+
+        # Extract prompt from last message
+        last_message = request.messages[-1]
+        prompt = extract_text_content(last_message.parts)
+
+        # Stream events from agent
+        async for event in stream_mamba_agent_events(agent, prompt, history):
+            yield encode_stream_event(event)
+
+        yield encode_stream_event(FinishEvent())
+
+    except ValueError as e:
+        # Unknown agent name - this is a user error, provide the message directly
+        logger.error(f"Agent error: {e}")
+        yield encode_stream_event(create_stream_error_event(
+            code=ErrorCode.INVALID_REQUEST,
+            message=str(e),
+        ))
+    except Exception as e:
+        log_error(e, context={"component": "agent_streaming", "agent": request.agent})
+        error_code = classify_exception(e)
+        yield encode_stream_event(create_stream_error_event(code=error_code))
+
+
 async def _stream_chat_response(
     request: ChatCompletionRequest,
-    settings: SettingsDep,
+    settings: Settings,
     enable_tools: bool = False,
 ) -> AsyncIterator[str]:
     """Generate streaming SSE events from chat completion.
@@ -55,7 +114,13 @@ async def _stream_chat_response(
         # Extract model name from model ID
         model_name = _extract_model_name(request.model)
 
-        # Create agent with the specified model and tools if enabled
+        # Check if agent-based routing is requested
+        if request.agent:
+            async for event_str in _stream_agent_response(request, settings, model_name):
+                yield event_str
+            return
+
+        # Existing ChatAgent flow
         agent = create_agent(
             settings,
             model_name=model_name,
@@ -125,13 +190,14 @@ async def chat_completions(
             detail="Messages array cannot be empty",
         )
 
-    # Determine if tools are enabled
-    enable_tools = bool(request_body.tools)
+    # Determine if tools are enabled (only for standard chat, not agent mode)
+    enable_tools = bool(request_body.tools) and not request_body.agent
 
     logger.info(
         f"Chat completion request: model={request_body.model}, "
         f"messages={len(request_body.messages)}, "
-        f"tools={'enabled' if enable_tools else 'disabled'}"
+        f"tools={'enabled' if enable_tools else 'disabled'}, "
+        f"agent={request_body.agent or 'none'}"
     )
 
     # Create streaming response with timeout and disconnect handling

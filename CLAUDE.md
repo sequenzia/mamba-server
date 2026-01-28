@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-FastAPI backend service providing OpenAI-powered chat completions with streaming support, designed for Vercel AI SDK integration. Python 3.11+ application using Pydantic AI's Agent-based architecture.
+FastAPI backend service providing OpenAI-powered chat completions with streaming support, designed for Vercel AI SDK integration. Python 3.12+ application using Pydantic AI's Agent-based architecture with optional Mamba Agents framework integration.
 
 **Architecture Style:** Layered/N-Tier with Streaming-First Design
 
@@ -34,7 +34,7 @@ FastAPI backend service providing OpenAI-powered chat completions with streaming
 | Layers | 6 (api, core, models, middleware, utils, config) |
 | Handlers | 4 (chat, health, models, title) |
 | Middleware | 3 (request_id, logging, auth) |
-| Core Modules | 6 (agent, streaming, messages, tools, tool_schema, title_utils) |
+| Core Modules | 7 (agent, mamba_agent, streaming, messages, tools, tool_schema, title_utils) |
 | Models | 5 (events, request, response, health, title) |
 | Utilities | 2 (retry, errors) |
 | Unit Test Files | 23 |
@@ -44,6 +44,7 @@ FastAPI backend service providing OpenAI-powered chat completions with streaming
 | Component | File | Criticality | Description |
 |-----------|------|-------------|-------------|
 | ChatAgent | `core/agent.py` | Critical | Core AI interaction wrapper using pydantic-ai |
+| MambaAgentAdapter | `core/mamba_agent.py` | High | Mamba Agents framework integration adapter |
 | create_streaming_response() | `core/streaming.py` | Critical | Factory for all SSE responses with timeout handling |
 | Settings | `config.py` | Critical | Multi-source configuration management |
 | StreamEvent | `models/events.py` | High | Type-safe discriminated union for stream events |
@@ -66,6 +67,7 @@ mamba-server/
 │   │   └── routes.py          # Route registration
 │   ├── core/                  # Business logic
 │   │   ├── agent.py           # ChatAgent - Pydantic AI wrapper
+│   │   ├── mamba_agent.py     # Mamba Agents framework adapter
 │   │   ├── streaming.py       # SSE encoding, timeout handling
 │   │   ├── messages.py        # Message format conversion
 │   │   ├── tools.py           # Tool definitions (forms, charts, code, cards)
@@ -217,16 +219,42 @@ pytest --cov=mamba  # With coverage
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/chat/completions` | POST | Streaming chat (SSE response) |
+| `/chat/completions` | POST | Streaming chat (SSE response, supports `agent` param for Mamba Agents) |
 | `/title/generate` | POST | Generate conversation title |
 | `/models` | GET | List available models |
 | `/health` | GET | Full health check |
 | `/health/live` | GET | Kubernetes liveness probe |
 | `/health/ready` | GET | Kubernetes readiness probe |
 
+## Mamba Agents Integration
+
+The server supports routing requests to pre-configured Mamba Agents via the `agent` parameter:
+
+**Available agents:**
+- `research` - Information gathering and synthesis with search tools
+- `code_review` - Code analysis with complexity metrics tools
+
+**Agent routing:**
+```json
+{
+  "messages": [...],
+  "model": "openai/gpt-4o",
+  "agent": "research"
+}
+```
+
+**Behavior:**
+- `agent: null` or omitted → Standard ChatAgent flow (backward compatible)
+- `agent: "research"` → Routes to research agent (ignores `tools` param)
+- `agent: "invalid"` → Streams `ErrorEvent` with available agents list
+
+**Key files:**
+- `core/mamba_agent.py` - Agent registry, factories, streaming adapter
+- Agent registration uses `@register_agent` decorator pattern
+
 ## Tools Available
 
-The agent supports these UI-generating tools (return args as result for client rendering):
+The ChatAgent (standard flow) supports these UI-generating tools (return args as result for client rendering):
 - `generateForm` - Interactive form components (text, select, checkbox, etc.)
 - `generateChart` - Data visualizations (line, bar, pie, area)
 - `generateCode` - Syntax-highlighted code blocks
@@ -246,7 +274,7 @@ The agent supports these UI-generating tools (return args as result for client r
 ```
 main.py (entry point)
 ├── api/routes.py
-│   ├── api/handlers/chat.py -> core/agent.py, core/streaming.py
+│   ├── api/handlers/chat.py -> core/agent.py, core/mamba_agent.py, core/streaming.py
 │   ├── api/handlers/health.py -> config.py
 │   ├── api/handlers/models.py -> config.py
 │   └── api/handlers/title.py -> core/agent.py
@@ -262,6 +290,13 @@ core/agent.py
 ├── core/tool_schema.py
 ├── models/events.py
 └── models/request.py
+
+core/mamba_agent.py
+├── config.py
+├── models/events.py
+├── models/request.py
+├── utils/errors.py
+└── mamba_agents (external)
 ```
 
 **Dependency Health:**
@@ -319,6 +354,7 @@ SSE Response (text-delta, tool-call, tool-result, finish)
 | Integration | Type | Location | Notes |
 |-------------|------|----------|-------|
 | OpenAI API | REST API | `core/agent.py` via pydantic-ai | Critical dependency |
+| Mamba Agents | Library | `core/mamba_agent.py` | Optional agent framework, local dependency |
 | PyJWT | Library | `middleware/auth.py` | Optional, lazy import |
 
 **OpenAI Configuration:**

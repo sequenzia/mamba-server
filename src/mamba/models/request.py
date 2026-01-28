@@ -50,3 +50,8 @@ class ChatCompletionRequest(BaseModel):
         default=None,
         description="Optional list of tool names to enable (e.g., ['generateForm', 'generateChart'])",
     )
+    agent: str | None = Field(
+        default=None,
+        description="Optional agent name (e.g., 'research', 'code_review'). "
+        "Routes to Mamba Agents framework when specified.",
+    )
