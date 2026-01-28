@@ -138,14 +138,14 @@ def create_stream_error_event(
         message: Optional custom message (takes precedence over code).
 
     Returns:
-        ErrorEvent model for SSE streaming.
+        ErrorEvent model for SSE streaming (AI SDK format).
     """
     if message:
         error_message = truncate_error(message)
     else:
         error_message = get_user_message(code)
 
-    return ErrorEvent(error=error_message)
+    return ErrorEvent(errorText=error_message)
 
 
 def classify_exception(exc: Exception) -> ErrorCode:

@@ -307,8 +307,9 @@ class TestStreamingAdapter:
         # Should have 2 text delta events
         assert len(events) == 2
         assert all(isinstance(e, TextDeltaEvent) for e in events)
-        assert events[0].textDelta == "Hello"
-        assert events[1].textDelta == " world"
+        assert events[0].id == "text-1"
+        assert events[0].delta == "Hello"
+        assert events[1].delta == " world"
 
     @pytest.mark.asyncio
     async def test_skips_empty_text_chunks(self):
@@ -334,8 +335,8 @@ class TestStreamingAdapter:
 
         # Should have only 2 events (empty skipped)
         assert len(events) == 2
-        assert events[0].textDelta == "Hello"
-        assert events[1].textDelta == "World"
+        assert events[0].delta == "Hello"
+        assert events[1].delta == "World"
 
     @pytest.mark.asyncio
     async def test_yields_error_event_on_exception(self):
@@ -355,7 +356,7 @@ class TestStreamingAdapter:
         assert len(events) == 1
         assert isinstance(events[0], ErrorEvent)
         # Error message is sanitized to user-friendly text, not raw exception
-        assert events[0].error  # Just verify there's an error message
+        assert events[0].errorText  # Just verify there's an error message
 
     @pytest.mark.asyncio
     async def test_passes_message_history(self):

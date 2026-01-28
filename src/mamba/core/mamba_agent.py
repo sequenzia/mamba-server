@@ -17,8 +17,8 @@ from mamba.config import Settings
 from mamba.models.events import (
     ErrorEvent,
     TextDeltaEvent,
-    ToolCallEvent,
-    ToolResultEvent,
+    ToolInputAvailableEvent,
+    ToolOutputAvailableEvent,
 )
 from mamba.models.request import TextPart, ToolInvocationPart, UIMessage
 from mamba.utils.errors import classify_exception, create_stream_error_event, log_error
@@ -340,19 +340,21 @@ async def stream_mamba_agent_events(
     agent: Agent,
     prompt: str,
     message_history: list[dict[str, Any]] | None = None,
-) -> AsyncIterator[TextDeltaEvent | ToolCallEvent | ToolResultEvent | ErrorEvent]:
+    text_id: str = "text-1",
+) -> AsyncIterator[TextDeltaEvent | ToolInputAvailableEvent | ToolOutputAvailableEvent | ErrorEvent]:
     """Stream events from a Mamba Agent, converting to StreamEvent format.
 
     Adapts the Mamba Agents streaming interface to emit events compatible
-    with Mamba Server's SSE protocol.
+    with Mamba Server's SSE protocol (AI SDK UIMessageChunk format).
 
     Args:
         agent: Configured Mamba Agent instance.
         prompt: User prompt to process.
         message_history: Optional message history as dict list.
+        text_id: ID to use for text block events.
 
     Yields:
-        StreamEvent objects (TextDeltaEvent, ToolCallEvent, ToolResultEvent, ErrorEvent).
+        StreamEvent objects (TextDeltaEvent, ToolInputAvailableEvent, etc.).
     """
     from mamba_agents.agent.message_utils import dicts_to_model_messages
     from pydantic_ai.messages import (
@@ -371,10 +373,10 @@ async def stream_mamba_agent_events(
             # Track emitted tool calls to avoid duplicates
             emitted_tool_calls: set[str] = set()
 
-            # Stream text chunks
+            # Stream text chunks (AI SDK format with id and delta fields)
             async for text_chunk in result.stream_text(delta=True):
                 if text_chunk:
-                    yield TextDeltaEvent(textDelta=text_chunk)
+                    yield TextDeltaEvent(id=text_id, delta=text_chunk)
 
             # After text streaming completes, check for tool calls in the result
             # Access the messages from the result to find tool calls
@@ -387,17 +389,17 @@ async def stream_mamba_agent_events(
                                 tool_call_id = part.tool_call_id
                                 if tool_call_id and tool_call_id not in emitted_tool_calls:
                                     emitted_tool_calls.add(tool_call_id)
-                                    yield ToolCallEvent(
+                                    yield ToolInputAvailableEvent(
                                         toolCallId=tool_call_id,
                                         toolName=part.tool_name,
-                                        args=part.args if isinstance(part.args, dict) else {},
+                                        input=part.args if isinstance(part.args, dict) else {},
                                     )
                             elif isinstance(part, ToolReturnPart):
                                 tool_call_id = part.tool_call_id
                                 if tool_call_id:
-                                    yield ToolResultEvent(
+                                    yield ToolOutputAvailableEvent(
                                         toolCallId=tool_call_id,
-                                        result=part.content if isinstance(part.content, dict) else {"result": str(part.content)},
+                                        output=part.content if isinstance(part.content, dict) else {"result": str(part.content)},
                                     )
             except Exception as tool_err:
                 # Tool event extraction is best-effort; log but don't fail
