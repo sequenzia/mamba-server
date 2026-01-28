@@ -2,3 +2,5 @@
 
 .env.*
 !.env.example
+
+config/config.local.yaml
