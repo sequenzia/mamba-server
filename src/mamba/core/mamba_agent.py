@@ -253,7 +253,7 @@ Your capabilities:
 Always be helpful while being truthful. If you're unsure about something, say so."""
 
 
-@register_agent("main")
+@@register_agent("main")
 def create_main_agent(settings: Settings, model_name: str) -> Agent:
     """Create the main general-purpose agent.
 
@@ -266,22 +266,10 @@ def create_main_agent(settings: Settings, model_name: str) -> Agent:
     Returns:
         Configured main Agent.
     """
-    from mamba_agents import Agent, AgentConfig
+    from ._agent import get_agent
 
-    agent_settings = _create_agent_settings(settings, model_name)
-
-    config = AgentConfig(
-        system_prompt=MAIN_SYSTEM_PROMPT,
-        track_context=False,
-        auto_compact=False,
-        graceful_tool_errors=True,
-    )
-
-    agent = Agent(
-        model_name,
-        settings=agent_settings,
-        config=config,
-    )
+    agent = get_agent(settings=settings,
+                        model_name=model_name)
 
     # Register placeholder tool for future expansion
     @agent.tool_plain
