@@ -253,7 +253,7 @@ Your capabilities:
 Always be helpful while being truthful. If you're unsure about something, say so."""
 
 
-@@register_agent("main")
+@register_agent("main")
 def create_main_agent(settings: Settings, model_name: str) -> Agent:
     """Create the main general-purpose agent.
 
