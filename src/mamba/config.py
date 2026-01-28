@@ -20,7 +20,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class CorsSettings(BaseModel):
     """CORS configuration."""
 
-    allowed_origins: list[str] = ["http://localhost:5173"]
+    allowed_origins: list[str] = ["http://localhost:3000"]
     allowed_methods: list[str] = ["GET", "POST", "OPTIONS"]
     allowed_headers: list[str] = [
         "Content-Type",

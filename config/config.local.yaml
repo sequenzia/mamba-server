@@ -48,10 +48,10 @@ models:
     supports_tools: true
 
 logging:
-  level: "INFO"
+  level: "DEBUG"
   format: "json"
-  include_request_body: false
-  include_response_body: false
+  include_request_body: true
+  include_response_body: true
 
 health:
   openai_check_enabled: true
