@@ -12,6 +12,7 @@ from mamba.core.agent import create_agent
 from mamba.core.mamba_agent import (
     convert_ui_messages_to_dicts,
     get_agent,
+    run_mamba_agent,
     stream_mamba_agent_events,
 )
 from mamba.core.messages import extract_text_content
@@ -59,13 +60,95 @@ def _extract_model_name(model_id: str) -> str:
     return model_id
 
 
-async def _stream_agent_response(
+async def _run_agent_response(
     request: ChatCompletionRequest,
     settings: Settings,
     model_name: str,
     message_id: str,
 ) -> AsyncIterator[str]:
-    """Stream response from a Mamba Agent.
+    """Run Mamba Agent non-streaming and emit SSE events.
+
+    This is the default execution mode for Mamba agents. It runs the agent
+    to completion before emitting events, providing simpler and more reliable
+    behavior than streaming.
+
+    Args:
+        request: The chat completion request.
+        settings: Application settings.
+        model_name: Model name to use.
+        message_id: Unique message ID for this response.
+
+    Yields:
+        SSE-encoded event strings in AI SDK format.
+    """
+    text_id = "text-1"
+
+    # Defensive check for empty messages (endpoint validation should catch this,
+    # but protect against potential internal calls or future refactoring)
+    if not request.messages:
+        yield encode_stream_event(create_stream_error_event(
+            code=ErrorCode.INVALID_REQUEST,
+            message="No messages provided",
+        ))
+        yield SSE_DONE_MARKER
+        return
+
+    try:
+        # Emit start lifecycle events
+        yield encode_stream_event(StartEvent(messageId=message_id))
+        yield encode_stream_event(StartStepEvent())
+
+        # Get the configured agent
+        agent = get_agent(request.agent, settings, model_name)
+
+        # Convert message history (all but last message)
+        history = None
+        if len(request.messages) > 1:
+            history = convert_ui_messages_to_dicts(request.messages[:-1])
+
+        # Extract prompt from last message
+        last_message = request.messages[-1]
+        prompt = extract_text_content(last_message.parts)
+
+        # Run agent (non-streaming) and await result
+        text_output = await run_mamba_agent(agent, prompt, history)
+
+        # Emit text as single block
+        yield encode_stream_event(TextStartEvent(id=text_id))
+        if text_output:
+            yield encode_stream_event(TextDeltaEvent(id=text_id, delta=text_output))
+        yield encode_stream_event(TextEndEvent(id=text_id))
+
+        # Emit finish lifecycle events
+        yield encode_stream_event(FinishStepEvent())
+        yield encode_stream_event(FinishEvent(finishReason="stop"))
+        yield SSE_DONE_MARKER
+
+    except ValueError as e:
+        # Unknown agent name - this is a user error, provide the message directly
+        logger.error(f"Agent error: {e}")
+        yield encode_stream_event(create_stream_error_event(
+            code=ErrorCode.INVALID_REQUEST,
+            message=str(e),
+        ))
+        yield SSE_DONE_MARKER
+    except Exception as e:
+        log_error(e, context={"component": "agent_nonstreaming", "agent": request.agent})
+        error_code = classify_exception(e)
+        yield encode_stream_event(create_stream_error_event(code=error_code))
+        yield SSE_DONE_MARKER
+
+
+async def _stream_agent_response_legacy(
+    request: ChatCompletionRequest,
+    settings: Settings,
+    model_name: str,
+    message_id: str,
+) -> AsyncIterator[str]:
+    """Stream response from a Mamba Agent (legacy streaming mode).
+
+    This function is kept for future use when streaming is needed.
+    The default behavior now uses _run_agent_response() for non-streaming.
 
     Args:
         request: The chat completion request.
@@ -162,7 +245,7 @@ async def _stream_chat_response(
 
         # Check if agent-based routing is requested
         if request.agent:
-            async for event_str in _stream_agent_response(
+            async for event_str in _run_agent_response(
                 request, settings, model_name, message_id
             ):
                 yield event_str

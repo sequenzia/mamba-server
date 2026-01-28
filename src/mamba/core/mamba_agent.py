@@ -471,3 +471,40 @@ async def stream_mamba_agent_events(
         log_error(e, context={"component": "mamba_agent"})
         error_code = classify_exception(e)
         yield create_stream_error_event(code=error_code)
+
+
+async def run_mamba_agent(
+    agent: Agent,
+    prompt: str,
+    message_history: list[dict[str, Any]] | None = None,
+) -> str:
+    """Run Mamba Agent non-streaming and return the text output.
+
+    This is the default execution mode for Mamba agents. It awaits the
+    complete result before returning, which is simpler and more reliable
+    than streaming for most use cases.
+
+    Args:
+        agent: Configured Mamba Agent instance.
+        prompt: User prompt to process.
+        message_history: Optional message history as dict list.
+
+    Returns:
+        The agent's text response.
+
+    Raises:
+        Exception: Propagates any errors from the agent.
+    """
+    from mamba_agents.agent.message_utils import dicts_to_model_messages
+    from pydantic_ai.messages import ModelMessage
+
+    # Convert dict history to ModelMessage format if provided
+    history: list[ModelMessage] | None = None
+    if message_history:
+        history = dicts_to_model_messages(message_history)
+
+    # Run agent (non-streaming)
+    result = await agent.run(prompt, message_history=history)
+
+    # Return just the text output
+    return str(result.output) if result.output else ""

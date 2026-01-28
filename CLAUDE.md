@@ -268,12 +268,20 @@ The server supports routing requests to pre-configured Mamba Agents via the `age
 
 **Behavior:**
 - `agent: null` or omitted -> Standard ChatAgent flow (backward compatible)
-- `agent: "research"` -> Routes to research agent (ignores `tools` param)
+- `agent: "research"` -> Routes to research agent (non-streaming, ignores `tools` param)
 - `agent: "invalid"` -> Streams `ErrorEvent` with available agents list
 
+**Execution mode:**
+Mamba agents use **non-streaming execution by default**. The agent runs to completion before emitting SSE events. This provides simpler and more reliable behavior. The streaming implementation (`_stream_agent_response_legacy`) is preserved for future use when real-time token streaming is needed.
+
 **Key files:**
-- `core/mamba_agent.py` - Agent registry, factories, streaming adapter
+- `core/mamba_agent.py` - Agent registry, factories, non-streaming execution
+- `api/handlers/chat.py` - `_run_agent_response()` for non-streaming SSE emission
 - Agent registration uses `@register_agent` decorator pattern
+
+**Key functions:**
+- `run_mamba_agent()` - Non-streaming execution, returns text output
+- `stream_mamba_agent_events()` - Streaming execution (preserved for future use)
 
 **Note:** Tool implementations (`search_notes`, `analyze_complexity`) currently return placeholder/stub data. These should be replaced with real implementations for production use.
 

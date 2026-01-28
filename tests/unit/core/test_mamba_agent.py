@@ -10,6 +10,7 @@ from mamba.core.mamba_agent import (
     get_agent,
     get_available_agents,
     register_agent,
+    run_mamba_agent,
     stream_mamba_agent_events,
 )
 from mamba.models.events import ErrorEvent, TextDeltaEvent
@@ -389,3 +390,112 @@ class TestStreamingAdapter:
                 events.append(event)
 
             mock_convert.assert_called_once_with(history)
+
+
+class TestRunMambaAgent:
+    """Tests for non-streaming run_mamba_agent function."""
+
+    @pytest.mark.asyncio
+    async def test_returns_text_output(self):
+        """Test that run_mamba_agent returns the agent output text."""
+        # Create a mock result with output property
+        mock_result = MagicMock()
+        mock_result.output = "Hello, I am the agent response."
+
+        # Create a mock agent with async run method
+        mock_agent = MagicMock()
+        mock_agent.run = AsyncMock(return_value=mock_result)
+
+        result = await run_mamba_agent(mock_agent, "test prompt")
+
+        assert result == "Hello, I am the agent response."
+        mock_agent.run.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_string_for_none_output(self):
+        """Test that None output returns empty string."""
+        mock_result = MagicMock()
+        mock_result.output = None
+
+        mock_agent = MagicMock()
+        mock_agent.run = AsyncMock(return_value=mock_result)
+
+        result = await run_mamba_agent(mock_agent, "test prompt")
+
+        assert result == ""
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_string_for_empty_output(self):
+        """Test that empty output returns empty string."""
+        mock_result = MagicMock()
+        mock_result.output = ""
+
+        mock_agent = MagicMock()
+        mock_agent.run = AsyncMock(return_value=mock_result)
+
+        result = await run_mamba_agent(mock_agent, "test prompt")
+
+        assert result == ""
+
+    @pytest.mark.asyncio
+    async def test_passes_message_history(self):
+        """Test that message history is converted and passed."""
+        mock_result = MagicMock()
+        mock_result.output = "Response"
+
+        mock_agent = MagicMock()
+        mock_agent.run = AsyncMock(return_value=mock_result)
+
+        history = [{"role": "user", "content": "Previous message"}]
+
+        with patch("mamba_agents.agent.message_utils.dicts_to_model_messages") as mock_convert:
+            mock_converted = [MagicMock()]
+            mock_convert.return_value = mock_converted
+
+            result = await run_mamba_agent(mock_agent, "test", history)
+
+            mock_convert.assert_called_once_with(history)
+            mock_agent.run.assert_called_once()
+            # Verify converted history was passed
+            call_kwargs = mock_agent.run.call_args
+            assert call_kwargs.kwargs["message_history"] == mock_converted
+
+    @pytest.mark.asyncio
+    async def test_no_history_conversion_when_none(self):
+        """Test that no conversion happens when history is None."""
+        mock_result = MagicMock()
+        mock_result.output = "Response"
+
+        mock_agent = MagicMock()
+        mock_agent.run = AsyncMock(return_value=mock_result)
+
+        with patch("mamba_agents.agent.message_utils.dicts_to_model_messages") as mock_convert:
+            result = await run_mamba_agent(mock_agent, "test", None)
+
+            mock_convert.assert_not_called()
+            # Verify None was passed for history
+            call_kwargs = mock_agent.run.call_args
+            assert call_kwargs.kwargs["message_history"] is None
+
+    @pytest.mark.asyncio
+    async def test_propagates_agent_errors(self):
+        """Test that errors from agent.run are propagated."""
+        mock_agent = MagicMock()
+        mock_agent.run = AsyncMock(side_effect=RuntimeError("Agent failed"))
+
+        with pytest.raises(RuntimeError, match="Agent failed"):
+            await run_mamba_agent(mock_agent, "test prompt")
+
+    @pytest.mark.asyncio
+    async def test_converts_non_string_output_to_string(self):
+        """Test that non-string output is converted to string."""
+        mock_result = MagicMock()
+        mock_result.output = 12345  # Non-string output
+
+        mock_agent = MagicMock()
+        mock_agent.run = AsyncMock(return_value=mock_result)
+
+        result = await run_mamba_agent(mock_agent, "test prompt")
+
+        assert result == "12345"
+        assert isinstance(result, str)
