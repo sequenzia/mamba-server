@@ -29,8 +29,8 @@ FastAPI backend service providing OpenAI-powered chat completions with streaming
 
 | Metric | Value |
 |--------|-------|
-| Total Lines | ~3,275 lines of Python |
-| Python Modules | 31 files |
+| Total Lines | ~4,122 lines of Python |
+| Python Modules | 32 files |
 | Layers | 6 (api, core, models, middleware, utils, config) |
 | Handlers | 4 (chat, health, models, title) |
 | Middleware | 3 (request_id, logging, auth) |
@@ -55,22 +55,22 @@ FastAPI backend service providing OpenAI-powered chat completions with streaming
 ### Key Method Line References
 
 **ChatAgent (`core/agent.py`):**
-- `convert_messages()` - lines 101-169 - Transforms UIMessage to ModelMessage format
-- `stream_text()` - lines 171-200 - Simple text streaming without tools
-- `stream_events()` - lines 346-431 - Full event streaming with tool support
-- `_register_tools()` - Inline tool registration
+- `convert_messages()` - lines 101-197 - Transforms UIMessage to ModelMessage format
+- `stream_text()` - lines 199-228 - Simple text streaming without tools
+- `stream_events()` - lines 374-463 - Full event streaming with tool support
+- `_register_tools()` - lines 260-372 - Inline tool registration
 
 **MambaAgentAdapter (`core/mamba_agent.py`):**
 - `create_research_agent()` - lines 127-176 - Factory for research agent
 - `create_code_review_agent()` - lines 193-242 - Factory for code review agent
-- `convert_ui_messages_to_dicts()` - lines 250-315 - Message format adapter
-- `stream_mamba_agent_events()` - lines 339-409 - Adapts Mamba Agents streaming to StreamEvent format
+- `convert_ui_messages_to_dicts()` - lines 312-377 - Message format adapter
+- `stream_mamba_agent_events()` - lines 401-473 - Adapts Mamba Agents streaming to StreamEvent format
 
 **Streaming (`core/streaming.py`):**
-- `encode_sse_event()` - lines 20-34 - Converts events to SSE format
-- `stream_with_timeout()` - lines 70-125 - 5-minute default timeout, disconnect detection
-- `create_streaming_response()` - lines 128-154 - Factory for all SSE responses
-- `SSEStream` class - lines 157-220 - Builder pattern for event streams
+- `encode_sse_event()` - lines 38-52 - Converts events to SSE format
+- `stream_with_timeout()` - lines 91-158 - 5-minute default timeout, disconnect detection
+- `create_streaming_response()` - lines 161-189 - Factory for all SSE responses
+- `SSEStream` class - lines 192-282 - Builder pattern for event streams
 
 ## Repository Structure
 
