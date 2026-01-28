@@ -318,11 +318,11 @@ class TestMessagePartDiscrimination:
         msg = UIMessage(id="1", role="assistant", parts=[data])  # type: ignore
         assert isinstance(msg.parts[0], ToolInvocationPart)
 
-    def test_invalid_part_type_rejected(self):
-        """Test invalid part type raises error."""
+    def test_invalid_part_type_filtered(self):
+        """Test invalid part types are filtered (not rejected)."""
         data = {"type": "invalid", "content": "test"}
-        with pytest.raises(ValidationError):
-            UIMessage(id="1", role="user", parts=[data])  # type: ignore
+        msg = UIMessage(id="1", role="user", parts=[data])  # type: ignore
+        assert msg.parts == []  # Filtered out, not error
 
     def test_parse_tool_call_part(self):
         """Test parsing tool-call part from dict (AI SDK format)."""
@@ -358,3 +358,59 @@ class TestMessagePartDiscrimination:
         assert isinstance(msg.parts[1], ToolCallPart)
         assert isinstance(msg.parts[2], ToolResultPart)
         assert isinstance(msg.parts[3], ToolInvocationPart)
+
+
+class TestMessagePartFiltering:
+    """Tests for message part filtering (lifecycle parts removed)."""
+
+    def test_step_start_filtered(self):
+        """Test step-start lifecycle part is filtered out."""
+        parts = [
+            {"type": "step-start"},
+            {"type": "text", "text": "Hello"},
+        ]
+        msg = UIMessage(id="1", role="assistant", parts=parts)  # type: ignore
+        assert len(msg.parts) == 1
+        assert isinstance(msg.parts[0], TextPart)
+
+    def test_unknown_parts_filtered(self):
+        """Test unknown part types are filtered out."""
+        parts = [
+            {"type": "reasoning", "text": "thinking..."},
+            {"type": "source-url", "url": "http://example.com"},
+            {"type": "text", "text": "Response"},
+        ]
+        msg = UIMessage(id="1", role="assistant", parts=parts)  # type: ignore
+        assert len(msg.parts) == 1
+        assert msg.parts[0].text == "Response"
+
+    def test_all_content_types_preserved(self):
+        """Test all valid content types are preserved."""
+        parts = [
+            {"type": "text", "text": "Hello"},
+            {"type": "tool-call", "toolCallId": "tc_1", "toolName": "test", "args": {}},
+            {"type": "tool-result", "toolCallId": "tc_1", "result": "done"},
+            {"type": "tool-invocation", "toolCallId": "tc_2", "toolName": "legacy", "args": {}},
+        ]
+        msg = UIMessage(id="1", role="assistant", parts=parts)  # type: ignore
+        assert len(msg.parts) == 4
+
+    def test_empty_after_filtering(self):
+        """Test message with only lifecycle parts results in empty parts."""
+        parts = [{"type": "step-start"}, {"type": "finish"}]
+        msg = UIMessage(id="1", role="assistant", parts=parts)  # type: ignore
+        assert msg.parts == []
+
+    def test_mixed_parts_in_real_scenario(self):
+        """Test realistic AI SDK message with mixed parts."""
+        parts = [
+            {"type": "step-start"},
+            {"type": "text", "text": "I'll help you with that."},
+            {"type": "tool-call", "toolCallId": "tc_1", "toolName": "generateForm", "args": {"title": "Form"}},
+            {"type": "tool-result", "toolCallId": "tc_1", "result": {"rendered": True}},
+        ]
+        msg = UIMessage(id="1", role="assistant", parts=parts)  # type: ignore
+        assert len(msg.parts) == 3
+        assert isinstance(msg.parts[0], TextPart)
+        assert isinstance(msg.parts[1], ToolCallPart)
+        assert isinstance(msg.parts[2], ToolResultPart)

@@ -2,7 +2,40 @@
 
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field
+
+
+# Part types that contain actual conversation content
+CONTENT_PART_TYPES = frozenset({"text", "tool-call", "tool-result", "tool-invocation"})
+
+
+def filter_message_parts(parts: list[Any]) -> list[Any]:
+    """Filter message parts to only include content types.
+
+    The AI SDK may include lifecycle/metadata parts like 'step-start',
+    'reasoning', 'source-url', etc. that are meaningful for UI rendering
+    but not for conversation context. These are filtered out.
+
+    Args:
+        parts: Raw list of message parts from the request.
+
+    Returns:
+        Filtered list containing only processable content parts.
+    """
+    if not isinstance(parts, list):
+        return parts
+
+    filtered = []
+    for part in parts:
+        # Dict from JSON - filter by type field
+        if isinstance(part, dict):
+            if part.get("type") in CONTENT_PART_TYPES:
+                filtered.append(part)
+        # Already a Pydantic model - pass through (already validated)
+        elif isinstance(part, BaseModel):
+            filtered.append(part)
+
+    return filtered
 
 
 class TextPart(BaseModel):
@@ -51,7 +84,8 @@ class UIMessage(BaseModel):
 
     id: str
     role: Literal["user", "assistant", "system"]
-    parts: list[MessagePart]
+    # Filter parts before validation to remove lifecycle/metadata parts
+    parts: Annotated[list[MessagePart], BeforeValidator(filter_message_parts)]
 
 
 class ChatCompletionRequest(BaseModel):
