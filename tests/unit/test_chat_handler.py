@@ -58,7 +58,7 @@ class TestChatCompletionsValidation:
         client = TestClient(app)
 
         response = client.post(
-            "/chat/completions",
+            "/chat",
             json={
                 "messages": [],
                 "model": "openai/gpt-4o",
@@ -74,7 +74,7 @@ class TestChatCompletionsValidation:
         client = TestClient(app)
 
         response = client.post(
-            "/chat/completions",
+            "/chat",
             json={
                 "messages": [
                     {
@@ -95,7 +95,7 @@ class TestChatCompletionsValidation:
         client = TestClient(app)
 
         response = client.post(
-            "/chat/completions",
+            "/chat",
             json={
                 "model": "openai/gpt-4o",
             },
@@ -135,7 +135,7 @@ class TestChatCompletionsStreaming:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -160,7 +160,7 @@ class TestChatCompletionsStreaming:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -184,7 +184,7 @@ class TestChatCompletionsStreaming:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -216,7 +216,7 @@ class TestChatCompletionsStreaming:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -245,7 +245,7 @@ class TestChatCompletionsStreaming:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -287,7 +287,7 @@ class TestChatCompletionsErrorHandling:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -341,7 +341,7 @@ class TestChatCompletionsWithHistory:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -423,7 +423,7 @@ class TestChatCompletionsWithTools:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent_with_tools
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -458,7 +458,7 @@ class TestChatCompletionsWithTools:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent_with_tools
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -490,7 +490,7 @@ class TestChatCompletionsWithTools:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent_with_tools
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -530,7 +530,7 @@ class TestChatCompletionsWithTools:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {

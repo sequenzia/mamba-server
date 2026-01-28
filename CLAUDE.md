@@ -21,7 +21,7 @@ FastAPI backend service providing OpenAI-powered chat completions with streaming
 
 **Entry Points:**
 - `src/mamba/main.py` - FastAPI app creation and middleware configuration
-- `POST /chat/completions` - Primary streaming chat endpoint
+- `POST /chat` - Primary streaming chat endpoint
 - `POST /title/generate` - Title generation endpoint
 - CLI: `uvicorn mamba.main:app` or `python -m mamba`
 
@@ -37,7 +37,7 @@ FastAPI backend service providing OpenAI-powered chat completions with streaming
 | Core Modules | 7 (agent, mamba_agent, streaming, messages, tools, tool_schema, title_utils) |
 | Models | 5 (events, request, response, health, title) |
 | Utilities | 2 (retry, errors) |
-| Unit Test Files | 23 |
+| Unit Test Files | 25 |
 
 ## Key Components
 
@@ -48,9 +48,29 @@ FastAPI backend service providing OpenAI-powered chat completions with streaming
 | create_streaming_response() | `core/streaming.py` | Critical | Factory for all SSE responses with timeout handling |
 | Settings | `config.py` | Critical | Multi-source configuration management |
 | StreamEvent | `models/events.py` | High | Type-safe discriminated union for stream events |
-| chat_completions() | `api/handlers/chat.py` | High | Primary streaming endpoint handler |
+| chat() | `api/handlers/chat.py` | High | Primary streaming endpoint handler |
 | convert_messages() | `core/agent.py` | High | Message format adapter (UI to pydantic-ai) |
 | @with_retry() | `utils/retry.py` | Medium | Exponential backoff resilience decorator |
+
+### Key Method Line References
+
+**ChatAgent (`core/agent.py`):**
+- `convert_messages()` - lines 101-169 - Transforms UIMessage to ModelMessage format
+- `stream_text()` - lines 171-200 - Simple text streaming without tools
+- `stream_events()` - lines 346-431 - Full event streaming with tool support
+- `_register_tools()` - Inline tool registration
+
+**MambaAgentAdapter (`core/mamba_agent.py`):**
+- `create_research_agent()` - lines 127-176 - Factory for research agent
+- `create_code_review_agent()` - lines 193-242 - Factory for code review agent
+- `convert_ui_messages_to_dicts()` - lines 250-315 - Message format adapter
+- `stream_mamba_agent_events()` - lines 339-409 - Adapts Mamba Agents streaming to StreamEvent format
+
+**Streaming (`core/streaming.py`):**
+- `encode_sse_event()` - lines 20-34 - Converts events to SSE format
+- `stream_with_timeout()` - lines 70-125 - 5-minute default timeout, disconnect detection
+- `create_streaming_response()` - lines 128-154 - Factory for all SSE responses
+- `SSEStream` class - lines 157-220 - Builder pattern for event streams
 
 ## Repository Structure
 
@@ -89,7 +109,7 @@ mamba-server/
 │   ├── config.py              # Settings management (multi-source)
 │   └── main.py                # App factory, middleware setup, exception handlers
 ├── tests/
-│   ├── unit/                  # Unit tests (23 test files, mirrors src/)
+│   ├── unit/                  # Unit tests (25 test files, mirrors src/)
 │   ├── integration/           # Integration tests
 │   ├── e2e/                   # End-to-end tests
 │   └── conftest.py            # Shared fixtures
@@ -133,6 +153,8 @@ mamba-server/
 
 - **Strategy Pattern**: Authentication modes (none, api_key, jwt) in `middleware/auth.py`
 
+- **Registry Pattern**: Agent registration via `@register_agent` decorator in `mamba_agent.py`
+
 ### Naming Conventions
 
 | Element | Convention | Example |
@@ -163,6 +185,7 @@ mamba-server/
 | Fix streaming | `core/streaming.py`, `api/handlers/chat.py` |
 | Message conversion | `core/messages.py`, `core/agent.py` |
 | Error handling | `utils/errors.py`, exception handlers in `main.py` |
+| Add Mamba Agent | `core/mamba_agent.py` - use `@register_agent` decorator |
 
 ## Configuration
 
@@ -219,7 +242,7 @@ pytest --cov=mamba  # With coverage
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/chat/completions` | POST | Streaming chat (SSE response, supports `agent` param for Mamba Agents) |
+| `/chat` | POST | Streaming chat (SSE response, supports `agent` param for Mamba Agents) |
 | `/title/generate` | POST | Generate conversation title |
 | `/models` | GET | List available models |
 | `/health` | GET | Full health check |
@@ -244,13 +267,15 @@ The server supports routing requests to pre-configured Mamba Agents via the `age
 ```
 
 **Behavior:**
-- `agent: null` or omitted → Standard ChatAgent flow (backward compatible)
-- `agent: "research"` → Routes to research agent (ignores `tools` param)
-- `agent: "invalid"` → Streams `ErrorEvent` with available agents list
+- `agent: null` or omitted -> Standard ChatAgent flow (backward compatible)
+- `agent: "research"` -> Routes to research agent (ignores `tools` param)
+- `agent: "invalid"` -> Streams `ErrorEvent` with available agents list
 
 **Key files:**
 - `core/mamba_agent.py` - Agent registry, factories, streaming adapter
 - Agent registration uses `@register_agent` decorator pattern
+
+**Note:** Tool implementations (`search_notes`, `analyze_complexity`) currently return placeholder/stub data. These should be replaced with real implementations for production use.
 
 ## Tools Available
 
@@ -354,7 +379,7 @@ SSE Response (text-delta, tool-call, tool-result, finish)
 | Integration | Type | Location | Notes |
 |-------------|------|----------|-------|
 | OpenAI API | REST API | `core/agent.py` via pydantic-ai | Critical dependency |
-| Mamba Agents | Library | `core/mamba_agent.py` | Optional agent framework, local dependency |
+| Mamba Agents | Library | `core/mamba_agent.py` | Optional agent framework, local file path dependency |
 | PyJWT | Library | `middleware/auth.py` | Optional, lazy import |
 
 **OpenAI Configuration:**
@@ -369,7 +394,7 @@ SSE Response (text-delta, tool-call, tool-result, finish)
 2. **Type Safety Throughout** - Discriminated unions, full type hints on all public APIs
 3. **Production-Ready Operations** - K8s manifests, health probes, structured logging
 4. **Flexible Authentication** - Three modes with lazy JWT loading for performance
-5. **Well-Tested Core Logic** - 23 unit test files mirroring source structure
+5. **Well-Tested Core Logic** - 25 unit test files mirroring source structure
 
 ## Known Gaps
 
@@ -379,11 +404,49 @@ SSE Response (text-delta, tool-call, tool-result, finish)
 - No rate limiting middleware
 - Single AI provider (OpenAI only) - no fallback
 
+## Recommendations
+
+### High Priority
+
+1. **Add CI/CD Pipeline**
+   - Configure GitHub Actions for automated test, lint, and build
+   - Include coverage reporting and PR checks
+   - Suggested workflow: lint -> test -> build -> deploy (staging)
+
+2. **Publish mamba-agents to PyPI**
+   - Current local file path dependency reduces portability
+   - Package and publish to PyPI or private registry
+   - Update `pyproject.toml` to use versioned package dependency
+
+3. **Pin pydantic-ai Conservatively**
+   - Change from `>=0.0.49` to `>=0.0.49,<0.1.0`
+   - 0.x versions may introduce breaking changes
+   - Monitor releases and test upgrades explicitly
+
+### Medium Priority
+
+4. **Add OpenTelemetry Integration**
+   - Implement distributed tracing for request flows
+   - Add metrics for streaming latency, token counts, error rates
+   - Export to Prometheus/Grafana or cloud observability platform
+
+5. **Implement Rate Limiting**
+   - Add middleware for request rate limiting per client/API key
+   - Consider token-based rate limiting for LLM calls
+   - Use Redis or in-memory store for distributed deployments
+
+6. **Replace Placeholder Tool Implementations**
+   - `search_notes` in mamba_agent.py returns stub data
+   - `analyze_complexity` returns mock complexity metrics
+   - Implement real functionality or document as examples
+
 ## Technical Debt
 
 | Item | Location | Risk |
 |------|----------|------|
-| pydantic-ai version pinning | `pyproject.toml` | Using `>=0.0.30` for 0.x library risks breaking changes |
+| pydantic-ai version pinning | `pyproject.toml` | Using `>=0.0.49` for 0.x library risks breaking changes |
+| mamba-agents local dependency | `pyproject.toml` | Local file path reduces portability across environments |
 | Tool registration | `core/agent.py` | Inline in `_register_tools()` rather than from configuration |
 | Duplicate tool definitions | `tools.py`, `agent.py` | Tool definitions partially duplicated |
 | Settings cache | `config.py` | LRU cache requires server restart on config changes |
+| Placeholder tool implementations | `core/mamba_agent.py` | `search_notes`, `analyze_complexity` return stub data |

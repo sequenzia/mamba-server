@@ -8,8 +8,7 @@ server:
   timeout_seconds: 300
   cors:
     allowed_origins:
-      - "http://localhost:5173"
-      - "https://chat.example.com"
+      - "http://localhost:3000"
     allowed_methods:
       - "GET"
       - "POST"

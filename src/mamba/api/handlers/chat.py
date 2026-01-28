@@ -161,8 +161,8 @@ async def _stream_chat_response(
         yield encode_stream_event(ErrorEvent(error=str(e)))
 
 
-@router.post("/chat/completions")
-async def chat_completions(
+@router.post("/chat")
+async def chat(
     request_body: ChatCompletionRequest,
     request: Request,
     settings: SettingsDep,
