@@ -7,7 +7,9 @@ from mamba.models.request import (
     ChatCompletionRequest,
     MessagePart,
     TextPart,
+    ToolCallPart,
     ToolInvocationPart,
+    ToolResultPart,
     UIMessage,
 )
 
@@ -82,6 +84,88 @@ class TestToolInvocationPart:
             "toolName": "generateForm",
             "args": {"title": "Test"},
             "result": None,
+        }
+
+
+class TestToolCallPart:
+    """Tests for ToolCallPart model (AI SDK format)."""
+
+    def test_valid_tool_call(self):
+        """Test valid tool call creation."""
+        part = ToolCallPart(
+            toolCallId="tc_abc123",
+            toolName="generateForm",
+            args={"title": "Contact Us"},
+        )
+        assert part.type == "tool-call"
+        assert part.toolCallId == "tc_abc123"
+        assert part.toolName == "generateForm"
+        assert part.args == {"title": "Contact Us"}
+
+    def test_tool_call_without_args(self):
+        """Test tool call with optional args."""
+        part = ToolCallPart(
+            toolCallId="tc_123",
+            toolName="noArgs",
+        )
+        assert part.args is None
+
+    def test_serialization(self):
+        """Test JSON serialization."""
+        part = ToolCallPart(
+            toolCallId="tc_123",
+            toolName="generateForm",
+            args={"title": "Test"},
+        )
+        data = part.model_dump()
+        assert data == {
+            "type": "tool-call",
+            "toolCallId": "tc_123",
+            "toolName": "generateForm",
+            "args": {"title": "Test"},
+        }
+
+
+class TestToolResultPart:
+    """Tests for ToolResultPart model (AI SDK format)."""
+
+    def test_valid_tool_result(self):
+        """Test valid tool result creation."""
+        part = ToolResultPart(
+            toolCallId="tc_abc123",
+            result={"status": "success"},
+        )
+        assert part.type == "tool-result"
+        assert part.toolCallId == "tc_abc123"
+        assert part.result == {"status": "success"}
+
+    def test_tool_result_with_string(self):
+        """Test tool result with string value."""
+        part = ToolResultPart(
+            toolCallId="tc_123",
+            result="Operation completed",
+        )
+        assert part.result == "Operation completed"
+
+    def test_tool_result_with_list(self):
+        """Test tool result with list value."""
+        part = ToolResultPart(
+            toolCallId="tc_123",
+            result=[1, 2, 3],
+        )
+        assert part.result == [1, 2, 3]
+
+    def test_serialization(self):
+        """Test JSON serialization."""
+        part = ToolResultPart(
+            toolCallId="tc_123",
+            result={"data": "value"},
+        )
+        data = part.model_dump()
+        assert data == {
+            "type": "tool-result",
+            "toolCallId": "tc_123",
+            "result": {"data": "value"},
         }
 
 
@@ -167,11 +251,17 @@ class TestChatCompletionRequest:
     def test_valid_model_formats(self):
         """Test valid model format patterns."""
         valid_models = [
+            # With openai/ prefix (legacy format)
             "openai/gpt-4o",
             "openai/gpt-4o-mini",
             "openai/gpt-4-turbo",
             "openai/o1-preview",
             "openai/o1-mini",
+            # Without prefix (AI SDK format)
+            "gpt-4o",
+            "gpt-4o-mini",
+            "gpt-5",
+            "o1-preview",
         ]
         for model in valid_models:
             request = ChatCompletionRequest(messages=[], model=model)
@@ -180,10 +270,7 @@ class TestChatCompletionRequest:
     def test_invalid_model_format_rejected(self):
         """Test invalid model format raises error."""
         invalid_models = [
-            "gpt-4o",  # Missing prefix
-            "anthropic/claude-3",  # Wrong provider
-            "openai/",  # Missing model name
-            "openai",  # No slash
+            "",  # Empty string
         ]
         for model in invalid_models:
             with pytest.raises(ValidationError, match="model"):
@@ -236,3 +323,38 @@ class TestMessagePartDiscrimination:
         data = {"type": "invalid", "content": "test"}
         with pytest.raises(ValidationError):
             UIMessage(id="1", role="user", parts=[data])  # type: ignore
+
+    def test_parse_tool_call_part(self):
+        """Test parsing tool-call part from dict (AI SDK format)."""
+        data = {
+            "type": "tool-call",
+            "toolCallId": "tc_1",
+            "toolName": "test",
+            "args": {"key": "value"},
+        }
+        msg = UIMessage(id="1", role="assistant", parts=[data])  # type: ignore
+        assert isinstance(msg.parts[0], ToolCallPart)
+
+    def test_parse_tool_result_part(self):
+        """Test parsing tool-result part from dict (AI SDK format)."""
+        data = {
+            "type": "tool-result",
+            "toolCallId": "tc_1",
+            "result": {"data": "value"},
+        }
+        msg = UIMessage(id="1", role="assistant", parts=[data])  # type: ignore
+        assert isinstance(msg.parts[0], ToolResultPart)
+
+    def test_mixed_ai_sdk_and_legacy_parts(self):
+        """Test message with mixed part types (AI SDK and legacy)."""
+        parts = [
+            {"type": "text", "text": "Here's the form"},
+            {"type": "tool-call", "toolCallId": "tc_1", "toolName": "generateForm", "args": {}},
+            {"type": "tool-result", "toolCallId": "tc_1", "result": {"rendered": True}},
+            {"type": "tool-invocation", "toolCallId": "tc_2", "toolName": "legacyTool", "args": {}},
+        ]
+        msg = UIMessage(id="1", role="assistant", parts=parts)  # type: ignore
+        assert isinstance(msg.parts[0], TextPart)
+        assert isinstance(msg.parts[1], ToolCallPart)
+        assert isinstance(msg.parts[2], ToolResultPart)
+        assert isinstance(msg.parts[3], ToolInvocationPart)

@@ -58,7 +58,7 @@ class TestChatCompletionsValidation:
         client = TestClient(app)
 
         response = client.post(
-            "/chat/completions",
+            "/chat",
             json={
                 "messages": [],
                 "model": "openai/gpt-4o",
@@ -68,13 +68,13 @@ class TestChatCompletionsValidation:
         assert response.status_code == 400
         assert "empty" in response.json()["detail"].lower()
 
-    def test_rejects_invalid_model_format(self, settings):
-        """Test that invalid model format returns validation error."""
+    def test_rejects_empty_model(self, settings):
+        """Test that empty model string returns validation error."""
         app = create_test_app(settings)
         client = TestClient(app)
 
         response = client.post(
-            "/chat/completions",
+            "/chat",
             json={
                 "messages": [
                     {
@@ -83,7 +83,7 @@ class TestChatCompletionsValidation:
                         "parts": [{"type": "text", "text": "Hello"}],
                     }
                 ],
-                "model": "invalid-model",  # Missing openai/ prefix
+                "model": "",  # Empty model string
             },
         )
 
@@ -95,7 +95,7 @@ class TestChatCompletionsValidation:
         client = TestClient(app)
 
         response = client.post(
-            "/chat/completions",
+            "/chat",
             json={
                 "model": "openai/gpt-4o",
             },
@@ -135,7 +135,7 @@ class TestChatCompletionsStreaming:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -160,7 +160,7 @@ class TestChatCompletionsStreaming:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -184,7 +184,7 @@ class TestChatCompletionsStreaming:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -200,12 +200,14 @@ class TestChatCompletionsStreaming:
         # Parse SSE events from response
         events = parse_sse_events(response.text)
 
-        # Should have text-delta events
+        # Should have text-delta events with id and delta fields (AI SDK format)
         text_deltas = [e for e in events if e.get("type") == "text-delta"]
         assert len(text_deltas) == 3
-        assert text_deltas[0]["textDelta"] == "Hello"
-        assert text_deltas[1]["textDelta"] == ", "
-        assert text_deltas[2]["textDelta"] == "world!"
+        assert text_deltas[0]["delta"] == "Hello"
+        assert text_deltas[1]["delta"] == ", "
+        assert text_deltas[2]["delta"] == "world!"
+        # All should have the same text ID
+        assert all(e["id"] == "text-1" for e in text_deltas)
 
     def test_sends_finish_event(self, settings, mock_agent):
         """Test that finish event is sent on completion."""
@@ -216,7 +218,7 @@ class TestChatCompletionsStreaming:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -232,9 +234,12 @@ class TestChatCompletionsStreaming:
         # Parse SSE events from response
         events = parse_sse_events(response.text)
 
-        # Last event should be finish
+        # Should have lifecycle events (AI SDK format)
+        start_events = [e for e in events if e.get("type") == "start"]
         finish_events = [e for e in events if e.get("type") == "finish"]
+        assert len(start_events) == 1
         assert len(finish_events) == 1
+        assert finish_events[0]["finishReason"] == "stop"
 
     def test_includes_cache_headers(self, settings, mock_agent):
         """Test that response includes proper cache headers."""
@@ -245,7 +250,7 @@ class TestChatCompletionsStreaming:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -287,7 +292,7 @@ class TestChatCompletionsErrorHandling:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -306,10 +311,10 @@ class TestChatCompletionsErrorHandling:
         # Parse SSE events
         events = parse_sse_events(response.text)
 
-        # Should have error event
+        # Should have error event (AI SDK format with errorText)
         error_events = [e for e in events if e.get("type") == "error"]
         assert len(error_events) == 1
-        assert "error" in error_events[0]["error"].lower() or "OpenAI" in error_events[0]["error"]
+        assert "errorText" in error_events[0]
 
 
 class TestChatCompletionsWithHistory:
@@ -341,7 +346,7 @@ class TestChatCompletionsWithHistory:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -374,11 +379,14 @@ class TestChatCompletionsWithHistory:
         # Parse SSE events
         events = parse_sse_events(response.text)
 
-        # Should have text-delta and finish events
+        # Should have text-delta and finish events with AI SDK format
         text_deltas = [e for e in events if e.get("type") == "text-delta"]
         finish_events = [e for e in events if e.get("type") == "finish"]
         assert len(text_deltas) >= 1
         assert len(finish_events) == 1
+        # Text deltas should have id and delta fields
+        assert "id" in text_deltas[0]
+        assert "delta" in text_deltas[0]
 
 
 class TestChatCompletionsWithTools:
@@ -393,29 +401,33 @@ class TestChatCompletionsWithTools:
     @pytest.fixture
     def mock_agent_with_tools(self):
         """Create a mock agent that yields tool events and text."""
-        from mamba.models.events import TextDeltaEvent, ToolCallEvent, ToolResultEvent
+        from mamba.models.events import (
+            TextDeltaEvent,
+            ToolInputAvailableEvent,
+            ToolOutputAvailableEvent,
+        )
 
-        async def mock_stream_events(prompt, message_history=None):
-            # Yield a tool call event
-            yield ToolCallEvent(
+        async def mock_stream_events(prompt, message_history=None, text_id="text-1"):
+            # Yield a tool input event (AI SDK format)
+            yield ToolInputAvailableEvent(
                 toolCallId="call_123",
                 toolName="generateForm",
-                args={"title": "Contact Form", "fields": []},
+                input={"title": "Contact Form", "fields": []},
             )
-            # Yield a tool result event
-            yield ToolResultEvent(
+            # Yield a tool output event (AI SDK format)
+            yield ToolOutputAvailableEvent(
                 toolCallId="call_123",
-                result={"title": "Contact Form", "fields": []},
+                output={"title": "Contact Form", "fields": []},
             )
-            # Yield some text
-            yield TextDeltaEvent(textDelta="Here is your form.")
+            # Yield some text with id and delta (AI SDK format)
+            yield TextDeltaEvent(id=text_id, delta="Here is your form.")
 
         mock = AsyncMock()
         mock.stream_events = mock_stream_events
         return mock
 
     def test_tool_call_events_emitted(self, settings, mock_agent_with_tools):
-        """Test that tool-call events are emitted in response."""
+        """Test that tool-input-available events are emitted in response."""
         app = create_test_app(settings)
         client = TestClient(app)
 
@@ -423,7 +435,7 @@ class TestChatCompletionsWithTools:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent_with_tools
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -442,15 +454,15 @@ class TestChatCompletionsWithTools:
         # Parse SSE events
         events = parse_sse_events(response.text)
 
-        # Should have tool-call event
-        tool_calls = [e for e in events if e.get("type") == "tool-call"]
+        # Should have tool-input-available event (AI SDK format)
+        tool_calls = [e for e in events if e.get("type") == "tool-input-available"]
         assert len(tool_calls) == 1
         assert tool_calls[0]["toolCallId"] == "call_123"
         assert tool_calls[0]["toolName"] == "generateForm"
-        assert tool_calls[0]["args"]["title"] == "Contact Form"
+        assert tool_calls[0]["input"]["title"] == "Contact Form"
 
     def test_tool_result_events_emitted(self, settings, mock_agent_with_tools):
-        """Test that tool-result events are emitted in response."""
+        """Test that tool-output-available events are emitted in response."""
         app = create_test_app(settings)
         client = TestClient(app)
 
@@ -458,7 +470,7 @@ class TestChatCompletionsWithTools:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent_with_tools
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -475,11 +487,11 @@ class TestChatCompletionsWithTools:
         # Parse SSE events
         events = parse_sse_events(response.text)
 
-        # Should have tool-result event
-        tool_results = [e for e in events if e.get("type") == "tool-result"]
+        # Should have tool-output-available event (AI SDK format)
+        tool_results = [e for e in events if e.get("type") == "tool-output-available"]
         assert len(tool_results) == 1
         assert tool_results[0]["toolCallId"] == "call_123"
-        assert "title" in tool_results[0]["result"]
+        assert "title" in tool_results[0]["output"]
 
     def test_tool_call_followed_by_text(self, settings, mock_agent_with_tools):
         """Test that tool calls can be followed by text responses."""
@@ -490,7 +502,7 @@ class TestChatCompletionsWithTools:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent_with_tools
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -507,10 +519,10 @@ class TestChatCompletionsWithTools:
         # Parse SSE events
         events = parse_sse_events(response.text)
 
-        # Check event sequence: tool-call, tool-result, text-delta, finish
+        # Check event sequence with AI SDK format types
         event_types = [e.get("type") for e in events]
-        assert "tool-call" in event_types
-        assert "tool-result" in event_types
+        assert "tool-input-available" in event_types
+        assert "tool-output-available" in event_types
         assert "text-delta" in event_types
         assert "finish" in event_types
 
@@ -530,7 +542,7 @@ class TestChatCompletionsWithTools:
             "mamba.api.handlers.chat.create_agent", return_value=mock_agent
         ):
             response = client.post(
-                "/chat/completions",
+                "/chat",
                 json={
                     "messages": [
                         {
@@ -549,8 +561,8 @@ class TestChatCompletionsWithTools:
 
         # Should have only text-delta and finish (no tool events)
         event_types = [e.get("type") for e in events]
-        assert "tool-call" not in event_types
-        assert "tool-result" not in event_types
+        assert "tool-input-available" not in event_types
+        assert "tool-output-available" not in event_types
         assert "text-delta" in event_types
 
 
@@ -567,6 +579,8 @@ def parse_sse_events(sse_text: str) -> list[dict]:
     for line in sse_text.split("\n"):
         if line.startswith("data: "):
             json_str = line[6:]  # Remove 'data: ' prefix
-            if json_str.strip():
+            json_str = json_str.strip()
+            # Skip [DONE] marker and empty strings
+            if json_str and json_str != "[DONE]":
                 events.append(json.loads(json_str))
     return events

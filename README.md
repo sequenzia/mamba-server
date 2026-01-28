@@ -1,6 +1,6 @@
 # Mamba Server
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green.svg)](https://fastapi.tiangolo.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -14,6 +14,7 @@ Mamba Server wraps OpenAI models using Pydantic AI's Agent-based architecture, d
 
 - **Streaming Chat Completions** - Real-time responses via Server-Sent Events (SSE)
 - **Vercel AI SDK Compatible** - Native support for Vercel AI SDK message format
+- **Mamba Agents Integration** - Route requests to specialized pre-configured agents (research, code review)
 - **Display Tools** - 4 built-in tools: `generateForm`, `generateChart`, `generateCode`, `generateCard`
 - **Flexible Authentication** - Support for none, API key, or JWT authentication
 - **Kubernetes Ready** - Health checks, liveness/readiness probes, and Helm-ready manifests
@@ -24,7 +25,7 @@ Mamba Server wraps OpenAI models using Pydantic AI's Agent-based architecture, d
 
 ### Prerequisites
 
-- Python 3.11 or higher
+- Python 3.12 or higher
 - [UV](https://github.com/astral-sh/uv) package manager (recommended) or pip
 - OpenAI API key
 
@@ -112,7 +113,7 @@ auth:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/chat/completions` | POST | Streaming chat completions via SSE |
+| `/chat` | POST | Streaming chat completions via SSE (supports `agent` param) |
 | `/title/generate` | POST | Generate conversation titles |
 | `/models` | GET | List available models |
 | `/health` | GET | Full health check (dependencies included) |
@@ -122,7 +123,7 @@ auth:
 ### Chat Completions
 
 ```bash
-curl -X POST http://localhost:8000/chat/completions \
+curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
@@ -151,6 +152,42 @@ Once running, access the auto-generated API docs:
 
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
+
+## Mamba Agents
+
+Mamba Server supports routing requests to specialized pre-configured agents via the `agent` parameter. This allows leveraging purpose-built agents with their own tool sets and system prompts.
+
+### Available Agents
+
+| Agent | Purpose | Tools |
+|-------|---------|-------|
+| `research` | Information gathering and synthesis | Search tools |
+| `code_review` | Code analysis and quality assessment | Complexity metrics tools |
+
+### Usage
+
+Include the `agent` parameter in your chat completion request:
+
+```bash
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "Research the latest trends in AI"}
+    ],
+    "model": "openai/gpt-4o",
+    "agent": "research"
+  }'
+```
+
+### Behavior
+
+- **`agent: null`** or omitted - Uses standard ChatAgent flow (backward compatible)
+- **`agent: "research"`** - Routes to research agent (ignores `tools` parameter)
+- **`agent: "code_review"`** - Routes to code review agent
+- **Invalid agent name** - Returns an error event with list of available agents
+
+When using Mamba Agents, the `tools` parameter in the request is ignored as each agent comes with its own pre-configured tool set.
 
 ## Development
 
@@ -204,7 +241,7 @@ docker run -p 8000:8000 \
   mamba-server:latest
 ```
 
-The Dockerfile uses a multi-stage build with Python 3.11-slim and runs as a non-root user (`mamba:1000`).
+The Dockerfile uses a multi-stage build with Python 3.12-slim and runs as a non-root user (`mamba:1000`).
 
 ### Kubernetes
 
@@ -233,6 +270,7 @@ mamba-server/
 │   │   └── routes.py          # Route registration
 │   ├── core/                  # Business logic
 │   │   ├── agent.py           # ChatAgent - Pydantic AI wrapper
+│   │   ├── mamba_agent.py     # Mamba Agents framework adapter
 │   │   ├── streaming.py       # SSE encoding, timeout handling
 │   │   ├── messages.py        # Message format conversion
 │   │   ├── tools.py           # Tool definitions (forms, charts, code, cards)
@@ -254,7 +292,7 @@ mamba-server/
 │   ├── config.py              # Settings management (multi-source)
 │   └── main.py                # FastAPI app factory, middleware setup
 ├── tests/
-│   ├── unit/                  # Unit tests (23 test files)
+│   ├── unit/                  # Unit tests (25 test files)
 │   ├── integration/           # Integration tests
 │   └── e2e/                   # End-to-end tests
 ├── k8s/                       # Kubernetes manifests
@@ -274,9 +312,9 @@ mamba-server/
 
 | Category | Technologies |
 |----------|--------------|
-| Language | Python 3.11+ |
+| Language | Python 3.12+ |
 | Framework | FastAPI 0.115+, Pydantic 2.10+ |
-| AI | Pydantic AI 0.0.30+, OpenAI |
+| AI | Pydantic AI 0.0.49+, OpenAI |
 | HTTP | httpx 0.28+, Uvicorn 0.32+ |
 | Testing | pytest, pytest-asyncio, respx |
 | Linting | Ruff |
@@ -303,7 +341,7 @@ Mamba Server uses a **Layered/N-Tier architecture** with a **streaming-first des
                              │
 ┌────────────────────────────▼────────────────────────────────┐
 │                   Core Layer                                │
-│         (ChatAgent, streaming, messages, tools)             │
+│    (ChatAgent, MambaAgentAdapter, streaming, tools)         │
 └────────────────────────────┬────────────────────────────────┘
                              │
 ┌────────────────────────────▼────────────────────────────────┐
@@ -315,7 +353,7 @@ Mamba Server uses a **Layered/N-Tier architecture** with a **streaming-first des
 **Key Design Patterns:**
 - **Factory Pattern** - `create_app()`, `create_agent()`, `create_streaming_response()` for testability
 - **Discriminated Unions** - Type-safe `StreamEvent` and `MessagePart` with Pydantic discriminators
-- **Adapter Pattern** - Message format conversion between UI and OpenAI formats
+- **Adapter Pattern** - Message format conversion between UI and OpenAI formats; MambaAgentAdapter for framework integration
 - **Decorator Pattern** - `@with_retry()` for exponential backoff on failures
 - **Dependency Injection** - FastAPI `Depends()` with `Annotated` types
 

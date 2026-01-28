@@ -92,10 +92,10 @@ class TestRouteRegistration:
         assert response.status_code == 200
 
     def test_chat_endpoint_exists(self, test_client):
-        """Test chat completions endpoint is registered."""
+        """Test chat endpoint is registered."""
         # Send empty messages to verify endpoint exists (returns 400 for empty messages)
         response = test_client.post(
-            "/chat/completions",
+            "/chat",
             json={
                 "messages": [],
                 "model": "openai/gpt-4o",

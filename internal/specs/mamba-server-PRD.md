@@ -109,7 +109,7 @@ Without mamba-server, the ai-chatbot project remains a demonstration only. With 
 **So that** users experience real-time, intelligent conversation
 
 **Acceptance Criteria:**
-- Messages are sent via POST /chat/completions
+- Messages are sent via POST /chat
 - Response streams as SSE events
 - Text appears progressively in the UI
 - Stream terminates with finish event
@@ -278,7 +278,7 @@ Without mamba-server, the ai-chatbot project remains a demonstration only. With 
 
 ## 6. API Specification
 
-### 6.1 POST /chat/completions
+### 6.1 POST /chat
 
 Stream chat completions from the AI model.
 
@@ -1235,7 +1235,7 @@ mamba-server/
 │       │   ├── deps.py          # Dependency injection
 │       │   └── handlers/
 │       │       ├── __init__.py
-│       │       ├── chat.py      # POST /chat/completions
+│       │       ├── chat.py      # POST /chat
 │       │       ├── health.py    # GET /health
 │       │       └── models.py    # GET /models
 │       │
@@ -1281,7 +1281,7 @@ mamba-server/
 
 ```
 1. Request Received
-   └── FastAPI receives POST /chat/completions
+   └── FastAPI receives POST /chat
 
 2. Middleware Chain
    ├── Request ID middleware assigns/extracts X-Request-ID
@@ -1335,7 +1335,7 @@ mamba-server/
 **Goal:** Basic chat completions without tools
 
 **Deliverables:**
-- [ ] POST /chat/completions endpoint
+- [ ] POST /chat endpoint
 - [ ] Pydantic AI Agent integration
 - [ ] OpenAI streaming connection
 - [ ] SSE response encoding
@@ -1450,11 +1450,11 @@ async def test_chat_completions_streams_response(
     client: AsyncClient,
     mock_openai: respx.MockRouter
 ):
-    mock_openai.post("/chat/completions").respond(
+    mock_openai.post("/chat").respond(
         stream=mock_streaming_response()
     )
 
-    async with client.stream("POST", "/chat/completions", json={
+    async with client.stream("POST", "/chat", json={
         "messages": [{"id": "1", "role": "user", "parts": [{"type": "text", "text": "Hi"}]}],
         "model": "openai/gpt-4o"
     }) as response:

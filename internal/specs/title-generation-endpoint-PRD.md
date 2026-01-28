@@ -428,7 +428,7 @@ async def generate_title(
 
 ### Authentication
 
-The endpoint uses the same authentication middleware as `/chat/completions`:
+The endpoint uses the same authentication middleware as `/chat`:
 
 - Respects `auth.mode` setting (`none`, `api_key`, `jwt`)
 - Validates credentials via existing middleware chain

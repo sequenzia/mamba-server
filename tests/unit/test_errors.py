@@ -111,12 +111,12 @@ class TestCreateStreamErrorEvent:
         """Test creates error event from code."""
         event = create_stream_error_event(code=ErrorCode.RATE_LIMITED)
         assert isinstance(event, ErrorEvent)
-        assert "high demand" in event.error
+        assert "high demand" in event.errorText
 
     def test_creates_event_with_custom_message(self):
         """Test creates error event with custom message."""
         event = create_stream_error_event(message="Custom error message")
-        assert event.error == "Custom error message"
+        assert event.errorText == "Custom error message"
 
     def test_message_takes_precedence(self):
         """Test custom message takes precedence over code."""
@@ -124,13 +124,13 @@ class TestCreateStreamErrorEvent:
             code=ErrorCode.RATE_LIMITED,
             message="Override message",
         )
-        assert event.error == "Override message"
+        assert event.errorText == "Override message"
 
     def test_truncates_long_message(self):
         """Test truncates very long messages."""
         long_message = "A" * 1000
         event = create_stream_error_event(message=long_message)
-        assert len(event.error) <= 500
+        assert len(event.errorText) <= 500
 
 
 class TestClassifyException:

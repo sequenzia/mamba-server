@@ -30,14 +30,14 @@ from mamba.core.tools import (
     GenerateFormArgs,
 )
 from mamba.models.events import (
-    FinishEvent,
     StreamEvent,
     TextDeltaEvent,
-    ToolCallEvent,
-    ToolResultEvent,
+    ToolInputAvailableEvent,
+    ToolOutputAvailableEvent,
 )
 from mamba.models.request import TextPart as UITextPart
-from mamba.models.request import ToolInvocationPart, UIMessage
+from mamba.models.request import ToolCallPart as UIToolCallPart
+from mamba.models.request import ToolInvocationPart, ToolResultPart, UIMessage
 
 logger = logging.getLogger(__name__)
 
@@ -137,9 +137,37 @@ class ChatAgent:
                 if text_content:
                     response_parts.append(TextPart(content=text_content))
 
-                # Extract tool calls (without results)
+                # Extract tool calls and results from all supported formats
                 for part in msg.parts:
-                    if isinstance(part, ToolInvocationPart):
+                    # AI SDK format: tool-call
+                    if isinstance(part, UIToolCallPart):
+                        response_parts.append(
+                            ToolCallPart(
+                                tool_name=part.toolName,
+                                args=part.args or {},
+                                tool_call_id=part.toolCallId,
+                            )
+                        )
+                    # AI SDK format: tool-result
+                    elif isinstance(part, ToolResultPart):
+                        result_content = (
+                            json.dumps(part.result)
+                            if isinstance(part.result, dict)
+                            else str(part.result)
+                        )
+                        result.append(
+                            ModelRequest(
+                                parts=[
+                                    ToolReturnPart(
+                                        tool_name="unknown",  # Not available in AI SDK format
+                                        content=result_content,
+                                        tool_call_id=part.toolCallId,
+                                    )
+                                ],
+                            )
+                        )
+                    # Legacy format: tool-invocation
+                    elif isinstance(part, ToolInvocationPart):
                         if part.result is None:
                             # This is a tool call
                             response_parts.append(
@@ -347,15 +375,19 @@ class ChatAgent:
         self,
         prompt: str,
         message_history: list[UIMessage] | None = None,
+        text_id: str = "text-1",
     ) -> AsyncIterator[StreamEvent]:
-        """Stream events including text deltas, tool calls, and tool results.
+        """Stream events including text deltas, tool inputs, and tool outputs.
+
+        Events are in AI SDK UIMessageChunk format.
 
         Args:
             prompt: The user's prompt/question.
             message_history: Optional previous conversation messages.
+            text_id: ID to use for text block events.
 
         Yields:
-            StreamEvent objects (TextDeltaEvent, ToolCallEvent, ToolResultEvent).
+            StreamEvent objects (TextDeltaEvent, ToolInputAvailableEvent, etc.).
         """
         from collections.abc import AsyncIterable
 
@@ -407,24 +439,24 @@ class ChatAgent:
                     # Check for new tool calls
                     for tool_call_id, info in pending_tool_calls.items():
                         if tool_call_id not in emitted_tool_calls:
-                            # Emit tool-call event
-                            yield ToolCallEvent(
+                            # Emit tool-input-available event (AI SDK format)
+                            yield ToolInputAvailableEvent(
                                 toolCallId=info.tool_call_id,
                                 toolName=info.tool_name,
-                                args=info.args,
+                                input=info.args,
                             )
                             emitted_tool_calls.add(tool_call_id)
 
-                            # For display tools, emit tool-result immediately
+                            # For display tools, emit tool-output-available immediately
                             # (the args ARE the result for rendering)
-                            yield ToolResultEvent(
+                            yield ToolOutputAvailableEvent(
                                 toolCallId=info.tool_call_id,
-                                result=info.args,
+                                output=info.args,
                             )
 
-                    # Emit text delta
+                    # Emit text delta with ID (AI SDK format)
                     if text:
-                        yield TextDeltaEvent(textDelta=text)
+                        yield TextDeltaEvent(id=text_id, delta=text)
 
         except Exception as e:
             logger.exception("Error during agent event streaming")

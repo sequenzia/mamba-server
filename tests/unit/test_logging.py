@@ -95,7 +95,7 @@ class TestJsonFormatter:
             exc_info=None,
         )
         record.method = "POST"
-        record.path = "/chat/completions"
+        record.path = "/chat"
         record.status_code = 200
         record.duration_ms = 1500
 
@@ -103,7 +103,7 @@ class TestJsonFormatter:
         data = json.loads(output)
 
         assert data["method"] == "POST"
-        assert data["path"] == "/chat/completions"
+        assert data["path"] == "/chat"
         assert data["status_code"] == 200
         assert data["duration_ms"] == 1500
 
