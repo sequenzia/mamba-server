@@ -242,6 +242,68 @@ def create_code_review_agent(settings: Settings, model_name: str) -> Agent:
     return agent
 
 
+MAIN_SYSTEM_PROMPT = """You are a helpful, harmless, and honest AI assistant.
+
+Your capabilities:
+- Engaging in natural, helpful conversations
+- Answering questions clearly and accurately
+- Helping with a wide variety of tasks
+- Asking clarifying questions when needed
+
+Always be helpful while being truthful. If you're unsure about something, say so."""
+
+
+@register_agent("main")
+def create_main_agent(settings: Settings, model_name: str) -> Agent:
+    """Create the main general-purpose agent.
+
+    This agent is designed for general conversation and assistance.
+
+    Args:
+        settings: Mamba Server settings.
+        model_name: Model to use.
+
+    Returns:
+        Configured main Agent.
+    """
+    from mamba_agents import Agent, AgentConfig
+
+    agent_settings = _create_agent_settings(settings, model_name)
+
+    config = AgentConfig(
+        system_prompt=MAIN_SYSTEM_PROMPT,
+        track_context=False,
+        auto_compact=False,
+        graceful_tool_errors=True,
+    )
+
+    agent = Agent(
+        model_name,
+        settings=agent_settings,
+        config=config,
+    )
+
+    # Register placeholder tool for future expansion
+    @agent.tool_plain
+    async def get_current_context(topic: str) -> dict[str, Any]:
+        """Get additional context about a topic.
+
+        Args:
+            topic: Topic to get context for.
+
+        Returns:
+            Context information.
+        """
+        # Placeholder - would integrate with context service
+        return {
+            "topic": topic,
+            "context": [],
+            "message": "Context service not yet connected",
+        }
+
+    return agent
+
+
 # ============================================================================
 # Message Conversion
 # ============================================================================
