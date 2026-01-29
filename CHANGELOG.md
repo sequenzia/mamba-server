@@ -13,3 +13,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - Change Mamba agents to use non-streaming execution by default for simpler and more reliable behavior
+
+### Fixed
+- Fix Mamba agent streaming with multiple tool calls terminating prematurely after first tool execution

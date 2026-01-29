@@ -397,6 +397,11 @@ async def stream_mamba_agent_events(
     Adapts the Mamba Agents streaming interface to emit events compatible
     with Mamba Server's SSE protocol (AI SDK UIMessageChunk format).
 
+    Events are emitted in real-time as they occur:
+    - TextDeltaEvent: As text is generated
+    - ToolInputAvailableEvent: When a tool is called (with arguments)
+    - ToolOutputAvailableEvent: When a tool returns (with result)
+
     Args:
         agent: Configured Mamba Agent instance.
         prompt: User prompt to process.
@@ -404,59 +409,101 @@ async def stream_mamba_agent_events(
         text_id: ID to use for text block events.
 
     Yields:
-        StreamEvent objects (TextDeltaEvent, ToolInputAvailableEvent, etc.).
+        StreamEvent objects in real-time as the agent executes.
     """
-    from mamba_agents.agent.message_utils import dicts_to_model_messages
-    from pydantic_ai.messages import (
-        ModelMessage,
-        ToolCallPart,
-        ToolReturnPart,
+    from mamba_agents import (
+        AgentRunResultEvent,
+        FunctionToolCallEvent,
+        FunctionToolResultEvent,
+        PartDeltaEvent,
+        TextPartDelta,
     )
+    from mamba_agents.agent.message_utils import dicts_to_model_messages
+    from pydantic_ai.messages import ModelMessage
 
     # Convert dict history to ModelMessage format if provided
     history: list[ModelMessage] | None = None
     if message_history:
         history = dicts_to_model_messages(message_history)
 
+    # Track emitted tool calls to avoid duplicates
+    emitted_tool_calls: set[str] = set()
+
     try:
-        async for result in agent.run_stream(prompt, message_history=history):
-            # Track emitted tool calls to avoid duplicates
-            emitted_tool_calls: set[str] = set()
+        async for event in agent.run_stream_events(prompt, message_history=history):
+            # Handle text deltas
+            if isinstance(event, PartDeltaEvent):
+                if isinstance(event.delta, TextPartDelta):
+                    content = event.delta.content_delta
+                    if content:
+                        yield TextDeltaEvent(id=text_id, delta=content)
 
-            # Stream text chunks (AI SDK format with id and delta fields)
-            async for text_chunk in result.stream_text(delta=True):
-                if text_chunk:
-                    yield TextDeltaEvent(id=text_id, delta=text_chunk)
+            # Handle tool being called (with arguments)
+            elif isinstance(event, FunctionToolCallEvent):
+                tool_call_id = event.part.tool_call_id
+                if not tool_call_id:
+                    logger.warning(
+                        f"FunctionToolCallEvent missing tool_call_id for tool "
+                        f"'{event.part.tool_name}', skipping"
+                    )
+                    continue
+                if tool_call_id in emitted_tool_calls:
+                    logger.debug(f"Duplicate tool call {tool_call_id}, skipping")
+                    continue
+                emitted_tool_calls.add(tool_call_id)
 
-            # After text streaming completes, check for tool calls in the result
-            # Access the messages from the result to find tool calls
-            try:
-                all_messages = result.all_messages()
-                for msg in all_messages:
-                    if hasattr(msg, "parts"):
-                        for part in msg.parts:
-                            if isinstance(part, ToolCallPart):
-                                tool_call_id = part.tool_call_id
-                                if tool_call_id and tool_call_id not in emitted_tool_calls:
-                                    emitted_tool_calls.add(tool_call_id)
-                                    yield ToolInputAvailableEvent(
-                                        toolCallId=tool_call_id,
-                                        toolName=part.tool_name,
-                                        input=part.args if isinstance(part.args, dict) else {},
-                                    )
-                            elif isinstance(part, ToolReturnPart):
-                                tool_call_id = part.tool_call_id
-                                if tool_call_id:
-                                    yield ToolOutputAvailableEvent(
-                                        toolCallId=tool_call_id,
-                                        output=part.content if isinstance(part.content, dict) else {"result": str(part.content)},
-                                    )
-            except Exception as tool_err:
-                # Tool event extraction is best-effort; log but don't fail
-                logger.debug(f"Could not extract tool events: {tool_err}")
+                # Parse args - they may be string (JSON) or dict
+                args = event.part.args
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except json.JSONDecodeError:
+                        args = {"raw": args}
+                elif not isinstance(args, dict):
+                    args = {}
+
+                yield ToolInputAvailableEvent(
+                    toolCallId=tool_call_id,
+                    toolName=event.part.tool_name,
+                    input=args,
+                )
+
+            # Handle tool result
+            elif isinstance(event, FunctionToolResultEvent):
+                tool_call_id = event.tool_call_id
+                if not tool_call_id:
+                    logger.warning(
+                        "FunctionToolResultEvent missing tool_call_id, skipping"
+                    )
+                    continue
+
+                # Convert result content to appropriate format
+                result_content = event.result.content if event.result else None
+                if result_content is None:
+                    output = {"result": None}
+                elif isinstance(result_content, dict):
+                    output = result_content
+                elif isinstance(result_content, str):
+                    # Try to parse as JSON, otherwise wrap as string result
+                    try:
+                        output = json.loads(result_content)
+                    except json.JSONDecodeError:
+                        output = {"result": result_content}
+                else:
+                    output = {"result": str(result_content)}
+
+                yield ToolOutputAvailableEvent(
+                    toolCallId=tool_call_id,
+                    output=output,
+                )
+
+            # Log completion (text was already streamed via PartDeltaEvent)
+            elif isinstance(event, AgentRunResultEvent):
+                output_preview = str(event.result.output)[:100] if event.result.output else "None"
+                logger.debug(f"Agent run completed with output: {output_preview}...")
 
     except Exception as e:
-        log_error(e, context={"component": "mamba_agent"})
+        log_error(e, context={"component": "mamba_agent_streaming"})
         error_code = classify_exception(e)
         yield create_stream_error_event(code=error_code)
 

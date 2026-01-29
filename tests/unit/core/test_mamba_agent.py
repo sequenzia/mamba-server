@@ -285,21 +285,21 @@ class TestStreamingAdapter:
 
     @pytest.mark.asyncio
     async def test_yields_text_delta_events(self):
-        """Test that text chunks become TextDeltaEvent."""
-        # Create a mock agent with run_stream that yields a result
-        mock_result = MagicMock()
+        """Test that PartDeltaEvent with TextPartDelta becomes TextDeltaEvent."""
+        from mamba_agents import PartDeltaEvent, TextPartDelta
 
-        async def mock_stream_text(delta=True):
-            yield "Hello"
-            yield " world"
+        # Create mock PartDeltaEvent objects with TextPartDelta
+        mock_events = [
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta="Hello")),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta=" world")),
+        ]
 
-        mock_result.stream_text = mock_stream_text
-
-        async def mock_run_stream(prompt, message_history=None):
-            yield mock_result
+        async def mock_run_stream_events(prompt, message_history=None):
+            for event in mock_events:
+                yield event
 
         mock_agent = MagicMock()
-        mock_agent.run_stream = mock_run_stream
+        mock_agent.run_stream_events = mock_run_stream_events
 
         events = []
         async for event in stream_mamba_agent_events(mock_agent, "test prompt"):
@@ -315,20 +315,21 @@ class TestStreamingAdapter:
     @pytest.mark.asyncio
     async def test_skips_empty_text_chunks(self):
         """Test that empty text chunks are not emitted."""
-        mock_result = MagicMock()
+        from mamba_agents import PartDeltaEvent, TextPartDelta
 
-        async def mock_stream_text(delta=True):
-            yield "Hello"
-            yield ""  # Empty chunk
-            yield "World"
+        # Create mock events with one empty delta
+        mock_events = [
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta="Hello")),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta="")),  # Empty
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta="World")),
+        ]
 
-        mock_result.stream_text = mock_stream_text
-
-        async def mock_run_stream(prompt, message_history=None):
-            yield mock_result
+        async def mock_run_stream_events(prompt, message_history=None):
+            for event in mock_events:
+                yield event
 
         mock_agent = MagicMock()
-        mock_agent.run_stream = mock_run_stream
+        mock_agent.run_stream_events = mock_run_stream_events
 
         events = []
         async for event in stream_mamba_agent_events(mock_agent, "test"):
@@ -343,12 +344,12 @@ class TestStreamingAdapter:
     async def test_yields_error_event_on_exception(self):
         """Test that exceptions become ErrorEvent with sanitized message."""
 
-        async def mock_run_stream(prompt, message_history=None):
+        async def mock_run_stream_events(prompt, message_history=None):
             raise RuntimeError("Test error")
             yield  # Make it an async generator
 
         mock_agent = MagicMock()
-        mock_agent.run_stream = mock_run_stream
+        mock_agent.run_stream_events = mock_run_stream_events
 
         events = []
         async for event in stream_mamba_agent_events(mock_agent, "test"):
@@ -362,22 +363,17 @@ class TestStreamingAdapter:
     @pytest.mark.asyncio
     async def test_passes_message_history(self):
         """Test that message history is converted and passed."""
-        mock_result = MagicMock()
-
-        async def mock_stream_text(delta=True):
-            yield "Response"
-
-        mock_result.stream_text = mock_stream_text
+        from mamba_agents import PartDeltaEvent, TextPartDelta
 
         received_history = None
 
-        async def mock_run_stream(prompt, message_history=None):
+        async def mock_run_stream_events(prompt, message_history=None):
             nonlocal received_history
             received_history = message_history
-            yield mock_result
+            yield PartDeltaEvent(index=0, delta=TextPartDelta(content_delta="Response"))
 
         mock_agent = MagicMock()
-        mock_agent.run_stream = mock_run_stream
+        mock_agent.run_stream_events = mock_run_stream_events
 
         history = [{"role": "user", "content": "Previous message"}]
 
@@ -390,6 +386,119 @@ class TestStreamingAdapter:
                 events.append(event)
 
             mock_convert.assert_called_once_with(history)
+
+    @pytest.mark.asyncio
+    async def test_yields_tool_input_event_on_function_call(self):
+        """Test that FunctionToolCallEvent becomes ToolInputAvailableEvent."""
+        from mamba_agents import FunctionToolCallEvent
+        from mamba.models.events import ToolInputAvailableEvent
+        from pydantic_ai.messages import ToolCallPart
+
+        # Create a mock FunctionToolCallEvent
+        mock_tool_call = ToolCallPart(
+            tool_name="search_notes",
+            args={"query": "test query"},
+            tool_call_id="call_123",
+        )
+        mock_event = FunctionToolCallEvent(part=mock_tool_call)
+
+        async def mock_run_stream_events(prompt, message_history=None):
+            yield mock_event
+
+        mock_agent = MagicMock()
+        mock_agent.run_stream_events = mock_run_stream_events
+
+        events = []
+        async for event in stream_mamba_agent_events(mock_agent, "test"):
+            events.append(event)
+
+        assert len(events) == 1
+        assert isinstance(events[0], ToolInputAvailableEvent)
+        assert events[0].toolCallId == "call_123"
+        assert events[0].toolName == "search_notes"
+        assert events[0].input == {"query": "test query"}
+
+    @pytest.mark.asyncio
+    async def test_yields_tool_output_event_on_function_result(self):
+        """Test that FunctionToolResultEvent becomes ToolOutputAvailableEvent."""
+        from mamba_agents import FunctionToolResultEvent
+        from mamba.models.events import ToolOutputAvailableEvent
+        from pydantic_ai.messages import ToolReturnPart
+
+        # Create a mock FunctionToolResultEvent
+        # tool_call_id is extracted from the result's ToolReturnPart
+        mock_result = ToolReturnPart(
+            tool_name="search_notes",
+            content={"notes": ["note1", "note2"]},
+            tool_call_id="call_123",
+        )
+        mock_event = FunctionToolResultEvent(result=mock_result)
+
+        async def mock_run_stream_events(prompt, message_history=None):
+            yield mock_event
+
+        mock_agent = MagicMock()
+        mock_agent.run_stream_events = mock_run_stream_events
+
+        events = []
+        async for event in stream_mamba_agent_events(mock_agent, "test"):
+            events.append(event)
+
+        assert len(events) == 1
+        assert isinstance(events[0], ToolOutputAvailableEvent)
+        assert events[0].toolCallId == "call_123"
+        assert events[0].output == {"notes": ["note1", "note2"]}
+
+    @pytest.mark.asyncio
+    async def test_interleaves_text_and_tool_events(self):
+        """Test proper interleaving: text -> tool_input -> tool_output -> text."""
+        from mamba_agents import (
+            FunctionToolCallEvent,
+            FunctionToolResultEvent,
+            PartDeltaEvent,
+            TextPartDelta,
+        )
+        from mamba.models.events import ToolInputAvailableEvent, ToolOutputAvailableEvent
+        from pydantic_ai.messages import ToolCallPart, ToolReturnPart
+
+        mock_tool_call = ToolCallPart(
+            tool_name="calculator",
+            args={"expression": "2+2"},
+            tool_call_id="call_456",
+        )
+        mock_tool_result = ToolReturnPart(
+            tool_name="calculator",
+            content="The result is 4",  # Non-JSON string gets wrapped in {"result": ...}
+            tool_call_id="call_456",
+        )
+
+        mock_events = [
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta="Let me calculate...")),
+            FunctionToolCallEvent(part=mock_tool_call),
+            FunctionToolResultEvent(result=mock_tool_result),
+            PartDeltaEvent(index=1, delta=TextPartDelta(content_delta="The answer is 4.")),
+        ]
+
+        async def mock_run_stream_events(prompt, message_history=None):
+            for event in mock_events:
+                yield event
+
+        mock_agent = MagicMock()
+        mock_agent.run_stream_events = mock_run_stream_events
+
+        events = []
+        async for event in stream_mamba_agent_events(mock_agent, "test"):
+            events.append(event)
+
+        assert len(events) == 4
+        assert isinstance(events[0], TextDeltaEvent)
+        assert events[0].delta == "Let me calculate..."
+        assert isinstance(events[1], ToolInputAvailableEvent)
+        assert events[1].toolName == "calculator"
+        assert isinstance(events[2], ToolOutputAvailableEvent)
+        assert events[2].output == {"result": "The result is 4"}
+        assert isinstance(events[3], TextDeltaEvent)
+        assert events[3].delta == "The answer is 4."
 
 
 class TestRunMambaAgent:
