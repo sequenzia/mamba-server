@@ -14,6 +14,7 @@ from mamba.config import (
     HealthSettings,
     JwtSettings,
     LoggingSettings,
+    MambaAgentSettings,
     ModelConfig,
     OpenAISettings,
     ServerSettings,
@@ -225,6 +226,25 @@ class TestTitleSettings:
 
         settings_max = TitleSettings(timeout_ms=30000)
         assert settings_max.timeout_ms == 30000
+
+
+class TestMambaAgentSettings:
+    """Tests for MambaAgentSettings."""
+
+    def test_default_values(self):
+        """Test default values."""
+        settings = MambaAgentSettings()
+        assert settings.enable_streaming is False
+
+    def test_enable_streaming_true(self):
+        """Test enable_streaming can be set to True."""
+        settings = MambaAgentSettings(enable_streaming=True)
+        assert settings.enable_streaming is True
+
+    def test_enable_streaming_false(self):
+        """Test enable_streaming can be explicitly set to False."""
+        settings = MambaAgentSettings(enable_streaming=False)
+        assert settings.enable_streaming is False
 
 
 class TestModelConfig:

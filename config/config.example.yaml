@@ -63,3 +63,7 @@ title:
   max_length: 50           # Maximum title length in characters (10-200)
   timeout_ms: 10000        # Timeout for generation in milliseconds (1000-30000)
   model: "gpt-4o-mini"     # Model to use for title generation
+
+# Mamba Agent settings
+mamba_agent:
+  enable_streaming: false  # Use non-streaming execution (default, more reliable)

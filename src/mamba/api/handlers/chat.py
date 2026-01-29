@@ -139,16 +139,16 @@ async def _run_agent_response(
         yield SSE_DONE_MARKER
 
 
-async def _stream_agent_response_legacy(
+async def _stream_agent_response(
     request: ChatCompletionRequest,
     settings: Settings,
     model_name: str,
     message_id: str,
 ) -> AsyncIterator[str]:
-    """Stream response from a Mamba Agent (legacy streaming mode).
+    """Stream response from a Mamba Agent with real-time token streaming.
 
-    This function is kept for future use when streaming is needed.
-    The default behavior now uses _run_agent_response() for non-streaming.
+    This function provides real-time streaming for Mamba agents.
+    Enable via settings.mamba_agent.enable_streaming = True.
 
     Args:
         request: The chat completion request.
@@ -161,6 +161,16 @@ async def _stream_agent_response_legacy(
     """
     text_id = "text-1"
     text_started = False
+
+    # Defensive check for empty messages (endpoint validation should catch this,
+    # but protect against potential internal calls or future refactoring)
+    if not request.messages:
+        yield encode_stream_event(create_stream_error_event(
+            code=ErrorCode.INVALID_REQUEST,
+            message="No messages provided",
+        ))
+        yield SSE_DONE_MARKER
+        return
 
     try:
         # Emit start lifecycle events
@@ -245,10 +255,17 @@ async def _stream_chat_response(
 
         # Check if agent-based routing is requested
         if request.agent:
-            async for event_str in _run_agent_response(
-                request, settings, model_name, message_id
-            ):
-                yield event_str
+            # Choose execution mode based on settings
+            if settings.mamba_agent.enable_streaming:
+                async for event_str in _stream_agent_response(
+                    request, settings, model_name, message_id
+                ):
+                    yield event_str
+            else:
+                async for event_str in _run_agent_response(
+                    request, settings, model_name, message_id
+                ):
+                    yield event_str
             return
 
         # Existing ChatAgent flow

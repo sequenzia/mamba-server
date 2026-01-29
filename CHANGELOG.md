@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 - Add "main" general-purpose agent for versatile chat conversations
+- Add `mamba_agent.enable_streaming` configuration setting to toggle between streaming and non-streaming Mamba agent execution
 
 ### Changed
 - Change Mamba agents to use non-streaming execution by default for simpler and more reliable behavior

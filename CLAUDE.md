@@ -202,6 +202,7 @@ mamba-server/
 - `MAMBA_OPENAI__BASE_URL` or `OPENAI_API_BASE_URL`: Custom API base URL (default: `https://api.openai.com/v1`)
 - `MAMBA_OPENAI__DEFAULT_MODEL`: Default model (e.g., `gpt-4o`)
 - `MAMBA_LOGGING__LEVEL`: Logging verbosity
+- `MAMBA_MAMBA_AGENT__ENABLE_STREAMING`: Enable streaming mode for Mamba agents (default: `false`)
 
 **Nested delimiter:** Use `__` for nested settings (e.g., `MAMBA_OPENAI__TIMEOUT_SECONDS`)
 
@@ -213,6 +214,7 @@ mamba-server/
 - `LoggingSettings` - Level, format, include body
 - `HealthSettings` - OpenAI check enabled, interval, timeout
 - `TitleSettings` - Max length, timeout, model
+- `MambaAgentSettings` - Enable streaming mode for Mamba agents
 
 ## Testing
 
@@ -272,16 +274,18 @@ The server supports routing requests to pre-configured Mamba Agents via the `age
 - `agent: "invalid"` -> Streams `ErrorEvent` with available agents list
 
 **Execution mode:**
-Mamba agents use **non-streaming execution by default**. The agent runs to completion before emitting SSE events. This provides simpler and more reliable behavior. The streaming implementation (`_stream_agent_response_legacy`) is preserved for future use when real-time token streaming is needed.
+Mamba agents use **non-streaming execution by default**. The agent runs to completion before emitting SSE events. This provides simpler and more reliable behavior.
+
+To enable real-time token streaming, set `mamba_agent.enable_streaming: true` in config or `MAMBA_MAMBA_AGENT__ENABLE_STREAMING=true` environment variable. Server restart required after config changes.
 
 **Key files:**
-- `core/mamba_agent.py` - Agent registry, factories, non-streaming execution
-- `api/handlers/chat.py` - `_run_agent_response()` for non-streaming SSE emission
+- `core/mamba_agent.py` - Agent registry, factories, execution functions
+- `api/handlers/chat.py` - `_run_agent_response()` (non-streaming), `_stream_agent_response()` (streaming)
 - Agent registration uses `@register_agent` decorator pattern
 
 **Key functions:**
 - `run_mamba_agent()` - Non-streaming execution, returns text output
-- `stream_mamba_agent_events()` - Streaming execution (preserved for future use)
+- `stream_mamba_agent_events()` - Streaming execution, yields events incrementally
 
 **Note:** Tool implementations (`search_notes`, `analyze_complexity`) currently return placeholder/stub data. These should be replaced with real implementations for production use.
 

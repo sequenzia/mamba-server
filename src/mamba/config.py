@@ -125,6 +125,15 @@ class TitleSettings(BaseModel):
     )
 
 
+class MambaAgentSettings(BaseModel):
+    """Settings for Mamba Agent execution."""
+
+    enable_streaming: bool = Field(
+        default=False,
+        description="Enable streaming mode for Mamba agents (default: non-streaming)",
+    )
+
+
 def _load_yaml_config(config_dir: Path) -> dict:
     """Load configuration from YAML files.
 
@@ -174,6 +183,7 @@ class Settings(BaseSettings):
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     health: HealthSettings = Field(default_factory=HealthSettings)
     title: TitleSettings = Field(default_factory=TitleSettings)
+    mamba_agent: MambaAgentSettings = Field(default_factory=MambaAgentSettings)
     models: list[ModelConfig] = Field(default_factory=list)
 
     # Direct environment variable mappings for common settings
